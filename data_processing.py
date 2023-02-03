@@ -4,8 +4,8 @@ from os import listdir
 from os.path import isfile, join
 import numpy as np
 import random
-from PIL import Image
-from PIL import ImageOps
+from PIL import Image, ImageOps, ImageEnhance
+
 # First forming file paths for destinations of training, testing and validation data
 TRAIN_DESTINATION = "data/train"; TEST_DESTINATION = "data/test"; VAL_DESTINATION = "data/val"
 
@@ -13,35 +13,65 @@ TRAIN_DESTINATION = "data/train"; TEST_DESTINATION = "data/test"; VAL_DESTINATIO
 DATA_LOCATION = "NTZ_filter_label_data"
 DATA_CLASSES = ["fail_label_crooked_print", "fail_label_half_printed", "fail_label_not_fully_printed", "no_fail"]
 
-# TODO: 
-# - Apply augmentations on augmentations in augment_data()
-# - Finish augmentation techniques in augment_data()
-
+# Augmentation of data
+# Currently there are 15 different augmentations being applied to each image in parallel
+# The rotated and flipped images are then also have all augmentations applied to them
+# Resulting in 48 * 42 (16 original + 13 for rotated and + 13 for flipped) = 2016 images per class instead of the original 48
 def augment_data():
-    # Set a maximum number of augmentations to perform after each other
-    max_augmentations = 4
-    augmentation_techniques = [
-                                [Image.Image.rotate, 180, "_rotated"], [Image.Image.transpose, Image.FLIP_TOP_BOTTOM, "_flipped"], [Image.Image.convert, 'L', "_grayscaled"],
+    # Defining augmentation techniques: Rotate, HorizontalFlip, Grayscale, AutoContrast, Invert, Equalize, Solarize, Posterize, Contrast, Color, Brightness, Sharpness
+    augmentation_techniques = [[Image.Image.rotate, 180, "_rotated"], [Image.Image.transpose, Image.FLIP_TOP_BOTTOM, "_flipped"], [Image.Image.convert, 'L', "_grayscaled"],
                                 [ImageOps.autocontrast, None, "_autocontrasted"],  [ImageOps.invert, None, "_inverted"], [ImageOps.equalize, None, "_equalized"],
-                                
-                                
-                                ]
+                                [ImageOps.solarize, 128, "_solarized128"], [ImageOps.posterize, 4, "_posterized4"], [ImageOps.posterize, 3, "_posterized3"],
+                                [ImageEnhance.Color, 0.5, "_colored05"], [ImageEnhance.Contrast, 0.5, "_contrasted05"], [ImageEnhance.Brightness, 0.5, "_brightened05"],
+                                [ImageEnhance.Brightness, 0.75, "_brightened075"], [ImageEnhance.Sharpness, 0, "_blurred"], [ImageEnhance.Sharpness, 2, "_sharpened"]]
 
-    # Implemented: Rotate, HorizontalFlip, Grayscale, AutoContrast, Invert, Equalize
-    # Not implemented: ShearX/Y, TranslateX/Y, , Solarize, Posterize, Contrast, Color, Brightness, Sharpness, Cutout and Sample Pairing
+    # Cutout is not generally applicable, since it might remove some vital information from the image
+    # -> Similar for ShearX/Y and TranslateX/Y
+    # Sample pairing also not applicable since the images can become unrecognizable
 
+    # Applying augmentations only in parallel
     for data_class in DATA_CLASSES:
+        # Making file selection
         path = TRAIN_DESTINATION + "/" + data_class
         files = [f for f in listdir(path) if isfile(join(path, f))]
-        for file in files:
-            img_path = path + "/" + file
-            img = Image.open(img_path)
-            # Apply each augmentation one time first
-            for item in augmentation_techniques:
-                # Apply technique to image and save it
-                augmented_img = item[0](img, item[1])
-                augmented_img.save(img_path + item[2] + ".bmp")            
 
+        apply_augmentation(files, path, augmentation_techniques)    
+
+    # Applying augmentations in parallel and iteratively     
+    for data_class in DATA_CLASSES:
+        # First selecting all files like normal
+        path = TRAIN_DESTINATION + "/" + data_class
+        files = [f for f in listdir(path) if isfile(join(path, f))]
+
+        # Then making a selection based on the rotated or flipped version
+        for name in ['_rotated.bmp', '_flipped.bmp']:
+            cleaned_files = []
+            for file in files:
+                if file.endswith(name):
+                    cleaned_files.append(file)
+
+            # Applying augmentation with flip and rotation cut off, since that is already applied to the images.
+            apply_augmentation(cleaned_files, path, augmentation_techniques[2:])
+            
+def apply_augmentation(files, path, augmentation_techniques):
+    # Opening images
+    for file in files:
+        img_path = path + "/" + file
+        img = Image.open(img_path)
+        img_path = img_path.replace(".bmp", "")
+
+        # Apply each augmentation once
+        for augmentation in augmentation_techniques:
+            # Apply technique to image and save it
+            # Enhance requires a different check and ImageOps sometimes do not have inputs
+            if augmentation[1] == None:
+                augmented_img = augmentation[0](img)
+            elif augmentation[0].__name__ in ["Color", "Contrast", "Brightness", "Sharpness"]:
+                enhancer = augmentation[0](img)
+                augmented_img = enhancer.enhance(augmentation[1])
+            else:
+                augmented_img = augmentation[0](img, augmentation[1])
+            augmented_img.save(img_path + augmentation[2] + ".bmp")
 
 def split_and_move():
     # 80/10/10 split for training/validation/testing data
