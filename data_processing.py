@@ -36,7 +36,10 @@ def augment_data():
         path = os.path.join(TRAIN_DESTINATION, data_class)
         files = [f for f in listdir(path) if isfile(join(path, f))]
 
-        apply_augmentation(files, path, augmentation_techniques)    
+        # Creating a file to write augmentations per image to and applying augmentations
+        augmentation_data_file = os.path.join(path, data_class + "_augmentation_data.txt")
+        open(augmentation_data_file, "x")
+        apply_augmentation(files, path, augmentation_techniques, augmentation_data_file)    
 
     # Applying augmentations in parallel and iteratively     
     for data_class in DATA_CLASSES:
@@ -52,9 +55,11 @@ def augment_data():
                     cleaned_files.append(img_file)
 
             # Applying augmentation with flip and rotation cut off, since that is already applied to the images.
-            apply_augmentation(cleaned_files, path, augmentation_techniques[2:])
+            # Augmentation files already exists, so the path only needs to be set
+            augmentation_data_file = os.path.join(path, data_class + "_augmentation_data.txt")
+            apply_augmentation(cleaned_files, path, augmentation_techniques[2:], augmentation_data_file)
             
-def apply_augmentation(files, path, augmentation_techniques):
+def apply_augmentation(files, path, augmentation_techniques, augmentation_data_file):
     # Opening images
     for img_name in files:
         img_path = os.path.join(path, img_name)
@@ -72,7 +77,24 @@ def apply_augmentation(files, path, augmentation_techniques):
                 augmented_img = enhancer.enhance(augmentation[1])
             else:
                 augmented_img = augmentation[0](img, augmentation[1])
+            
+            # Saving the augmented image and writing the augmentation to the augmentation file
+            if augmentation_techniques[0][2] == "_rotated":
+                # Parallel augmentations
+                with open(augmentation_data_file, "a") as f:
+                    augment = augmentation[2].replace("_", "")
+                    f.write(img_name + " " + augment + "\n")
+            # Parallel and iterative augmentations
+            elif img_name.endswith('_rotated.bmp'):
+                with open(augmentation_data_file, "a") as f:
+                    augment = augmentation[2].replace("_", "")
+                    f.write(img_name + " " + "rotated " + augment + "\n")
+            elif img_name.endswith('_flipped.bmp'):
+                with open(augmentation_data_file, "a") as f:
+                    augment = augmentation[2].replace("_", "")
+                    f.write(img_name + " " + "flipped " + augment + "\n")
             augmented_img.save(img_path + augmentation[2] + ".bmp")
+    f.close()
 
 def split_and_move():
     # 80/10/10 split for training/validation/testing data
@@ -128,8 +150,28 @@ def split_and_move():
             file_path = os.path.join(data_location, data_class, test_file)
             shutil.copy(file_path, destination_path)
 
+def set_grayscale_to_rgb():
+    for data_class in DATA_CLASSES:
+        # Making file selection
+        path = os.path.join(TRAIN_DESTINATION, data_class)
+        files = [f for f in listdir(path) if isfile(join(path, f))]
+
+        # Making a selection based on grayscale images
+        cleaned_files = []
+        for img_file in files:
+            if img_file.endswith('grayscaled.bmp'):
+                cleaned_files.append(img_file)
+        
+        # Saving the grayscaled images as RGB
+        for img_file in cleaned_files:
+            img_path = os.path.join(path, img_file)
+            img = Image.open(img_path)
+            RGB_img = img.convert('RGB')
+            RGB_img.save(img_path)
+
 if __name__ == '__main__':
     # Make sure to run split and move before augment
     # If not, augmentations will be applied to augmented images unregulated
     split_and_move()
     augment_data()
+    set_grayscale_to_rgb()
