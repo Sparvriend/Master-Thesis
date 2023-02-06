@@ -17,6 +17,7 @@ DATA_CLASSES = ["fail_label_crooked_print", "fail_label_half_printed", "fail_lab
 # Currently there are 15 different augmentations being applied to each image in parallel
 # The rotated and flipped images are then also have all augmentations applied to them
 # Resulting in 48 * 42 (16 original + 13 for rotated and + 13 for flipped) = 2016 images per class instead of the original 48
+
 def augment_data():
     # Defining augmentation techniques: Rotate, HorizontalFlip, Grayscale, AutoContrast, Invert, Equalize, Solarize, Posterize, Contrast, Color, Brightness, Sharpness
     augmentation_techniques = [[Image.Image.rotate, 180, "_rotated"], [Image.Image.transpose, Image.FLIP_TOP_BOTTOM, "_flipped"], [Image.Image.convert, 'L', "_grayscaled"],
@@ -32,7 +33,7 @@ def augment_data():
     # Applying augmentations only in parallel
     for data_class in DATA_CLASSES:
         # Making file selection
-        path = TRAIN_DESTINATION + "/" + data_class
+        path = os.path.join(TRAIN_DESTINATION, data_class)
         files = [f for f in listdir(path) if isfile(join(path, f))]
 
         apply_augmentation(files, path, augmentation_techniques)    
@@ -40,23 +41,23 @@ def augment_data():
     # Applying augmentations in parallel and iteratively     
     for data_class in DATA_CLASSES:
         # First selecting all files like normal
-        path = TRAIN_DESTINATION + "/" + data_class
+        path = os.path.join(TRAIN_DESTINATION, data_class)
         files = [f for f in listdir(path) if isfile(join(path, f))]
 
         # Then making a selection based on the rotated or flipped version
         for name in ['_rotated.bmp', '_flipped.bmp']:
             cleaned_files = []
-            for file in files:
-                if file.endswith(name):
-                    cleaned_files.append(file)
+            for img_file in files:
+                if img_file.endswith(name):
+                    cleaned_files.append(img_file)
 
             # Applying augmentation with flip and rotation cut off, since that is already applied to the images.
             apply_augmentation(cleaned_files, path, augmentation_techniques[2:])
             
 def apply_augmentation(files, path, augmentation_techniques):
     # Opening images
-    for file in files:
-        img_path = path + "/" + file
+    for img_name in files:
+        img_path = os.path.join(path, img_name)
         img = Image.open(img_path)
         img_path = img_path.replace(".bmp", "")
 
@@ -85,13 +86,13 @@ def split_and_move():
 
     for data_class in DATA_CLASSES:
         # Combining path and listing all files in the path
-        path = data_location + "/" + data_class
+        path = os.path.join(data_location, data_class)
         files = [f for f in listdir(path) if isfile(join(path, f))]
         # Removal of .ivp files and other things
         cleaned_files = []
-        for file in files:
-            if file.endswith('bmp'):
-                cleaned_files.append(file)
+        for img_file in files:
+            if img_file.endswith('bmp'):
+                cleaned_files.append(img_file)
         
         # Shuffling the images [WHEN REDOING THE MOVE, ENSURE THE MODEL IS NEVER TRAINED ON VALIDATION/TESTING DATA FROM PREVIOUS SPLIT]
         random.shuffle(cleaned_files)
@@ -104,27 +105,27 @@ def split_and_move():
         train, val, test = np.split(cleaned_files, [int(len(cleaned_files)*train_split), int(len(cleaned_files)*(train_split+val_split))])
 
         # Removing all old files present in the folders
-        for type in [TRAIN_DESTINATION, TEST_DESTINATION, VAL_DESTINATION]:
-            path = type + "/" + data_class
+        for destination_type in [TRAIN_DESTINATION, TEST_DESTINATION, VAL_DESTINATION]:
+            path = os.path.join(destination_type, data_class)
             files = [f for f in listdir(path) if isfile(join(path, f))]
-            for file in files:
-                file_path = path + "/" + file
+            for old_file in files:
+                file_path = os.path.join(path, old_file)
                 os.unlink(file_path)
 
         # Moving all files to appropriate directories
         for train_file in train:
-            destination_path = TRAIN_DESTINATION + "/" + data_class
-            file_path = data_location + "/" + data_class + "/" + train_file
+            destination_path = os.path.join(TRAIN_DESTINATION, data_class)
+            file_path = os.path.join(data_location, data_class, train_file)
             shutil.copy(file_path, destination_path)
         
         for val_file in val:
-            destination_path = VAL_DESTINATION + "/" + data_class
-            file_path = data_location + "/" + data_class + "/" + val_file
+            destination_path = os.path.join(VAL_DESTINATION, data_class)
+            file_path = os.path.join(data_location, data_class, val_file)
             shutil.copy(file_path, destination_path)
 
         for test_file in test:
-            destination_path = TEST_DESTINATION + "/" + data_class
-            file_path = data_location + "/" + data_class + "/" + test_file
+            destination_path = os.path.join(TEST_DESTINATION, data_class)
+            file_path = os.path.join(data_location, data_class, test_file)
             shutil.copy(file_path, destination_path)
 
 if __name__ == '__main__':
