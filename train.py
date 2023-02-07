@@ -1,5 +1,4 @@
 import torch
-import torchvision
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -16,7 +15,7 @@ NUM_WORKERS = 4
 
 def train_feature_extractor():
     # First setting the device to use
-    device = torch.device('cuda' if torch.cuda.is_available() else 'CPU')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device: " + str(device))
 
     # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
@@ -41,13 +40,9 @@ def train_feature_extractor():
 def analyse_dataset(dataset):
     print(len(dataset))
     for idx, item in enumerate(dataset):
-        print("label = " + str(item[1]))
-        print(item[0].shape)
         print(idx)
-        print("augmentations = " + str(item[2]))
-        print("\n\n\n")        
-        
-    print("Everything works fine")
+        print("name = " + str(item[0])); print("label = " + str(item[2]))
+        print("img shape = " + str(item[1].shape)); print("augmentations = " + str(item[3]) + "\n")
 
 if __name__ == '__main__':
     train_feature_extractor()

@@ -1,7 +1,6 @@
 import shutil
 import os
 from os import listdir
-from os.path import isfile, join
 import numpy as np
 import random
 from PIL import Image, ImageOps, ImageEnhance
@@ -34,18 +33,15 @@ def augment_data():
     for data_class in DATA_CLASSES:
         # Making file selection
         path = os.path.join(TRAIN_DESTINATION, data_class)
-        files = [f for f in listdir(path) if isfile(join(path, f))]
+        files = [f for f in listdir(path) if os.path.isfile(os.path.join(path, f))]
 
-        # Creating a file to write augmentations per image to and applying augmentations
-        augmentation_data_file = os.path.join(path, data_class + "_augmentation_data.txt")
-        open(augmentation_data_file, "x")
-        apply_augmentation(files, path, augmentation_techniques, augmentation_data_file)    
+        apply_augmentation(files, path, augmentation_techniques)    
 
     # Applying augmentations in parallel and iteratively     
     for data_class in DATA_CLASSES:
         # First selecting all files like normal
         path = os.path.join(TRAIN_DESTINATION, data_class)
-        files = [f for f in listdir(path) if isfile(join(path, f))]
+        files = [f for f in listdir(path) if os.path.isfile(os.path.join(path, f))]
 
         # Then making a selection based on the rotated or flipped version
         for name in ['_rotated.bmp', '_flipped.bmp']:
@@ -55,11 +51,9 @@ def augment_data():
                     cleaned_files.append(img_file)
 
             # Applying augmentation with flip and rotation cut off, since that is already applied to the images.
-            # Augmentation files already exists, so the path only needs to be set
-            augmentation_data_file = os.path.join(path, data_class + "_augmentation_data.txt")
-            apply_augmentation(cleaned_files, path, augmentation_techniques[2:], augmentation_data_file)
+            apply_augmentation(cleaned_files, path, augmentation_techniques[2:])
             
-def apply_augmentation(files, path, augmentation_techniques, augmentation_data_file):
+def apply_augmentation(files, path, augmentation_techniques):
     # Opening images
     for img_name in files:
         img_path = os.path.join(path, img_name)
@@ -77,24 +71,7 @@ def apply_augmentation(files, path, augmentation_techniques, augmentation_data_f
                 augmented_img = enhancer.enhance(augmentation[1])
             else:
                 augmented_img = augmentation[0](img, augmentation[1])
-            
-            # Saving the augmented image and writing the augmentation to the augmentation file
-            if augmentation_techniques[0][2] == "_rotated":
-                # Parallel augmentations
-                with open(augmentation_data_file, "a") as f:
-                    augment = augmentation[2].replace("_", "")
-                    f.write(img_name + " " + augment + "\n")
-            # Parallel and iterative augmentations
-            elif img_name.endswith('_rotated.bmp'):
-                with open(augmentation_data_file, "a") as f:
-                    augment = augmentation[2].replace("_", "")
-                    f.write(img_name + " " + "rotated " + augment + "\n")
-            elif img_name.endswith('_flipped.bmp'):
-                with open(augmentation_data_file, "a") as f:
-                    augment = augmentation[2].replace("_", "")
-                    f.write(img_name + " " + "flipped " + augment + "\n")
             augmented_img.save(img_path + augmentation[2] + ".bmp")
-    f.close()
 
 def split_and_move():
     # 80/10/10 split for training/validation/testing data
@@ -109,7 +86,7 @@ def split_and_move():
     for data_class in DATA_CLASSES:
         # Combining path and listing all files in the path
         path = os.path.join(data_location, data_class)
-        files = [f for f in listdir(path) if isfile(join(path, f))]
+        files = [f for f in listdir(path) if os.path.isfile(os.path.join(path, f))]
         # Removal of .ivp files and other things
         cleaned_files = []
         for img_file in files:
@@ -129,7 +106,7 @@ def split_and_move():
         # Removing all old files present in the folders
         for destination_type in [TRAIN_DESTINATION, TEST_DESTINATION, VAL_DESTINATION]:
             path = os.path.join(destination_type, data_class)
-            files = [f for f in listdir(path) if isfile(join(path, f))]
+            files = [f for f in listdir(path) if os.path.isfile(os.path.join(path, f))]
             for old_file in files:
                 file_path = os.path.join(path, old_file)
                 os.unlink(file_path)
@@ -154,7 +131,7 @@ def set_grayscale_to_rgb():
     for data_class in DATA_CLASSES:
         # Making file selection
         path = os.path.join(TRAIN_DESTINATION, data_class)
-        files = [f for f in listdir(path) if isfile(join(path, f))]
+        files = [f for f in listdir(path) if os.path.isfile(os.path.join(path, f))]
 
         # Making a selection based on grayscale images
         cleaned_files = []
