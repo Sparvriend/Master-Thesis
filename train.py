@@ -4,29 +4,58 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from NTZ_filter_dataset import NTZFilterDataset
-from torch.optim import lr_scheduler
+from torchmetrics import Accuracy
 import copy
 from tqdm import tqdm
 
 # TODO:
 # - Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
 # - Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
+# - Combine validation and training functions?
 
 # File paths
 TRAIN_PATH = "data/train"; VAL_PATH = "data/val"
 
 # General parameters for training
 BATCH_SIZE = 8
-EPOCHS = 25
+EPOCHS = 10
 SHUFFLE = True
 NUM_WORKERS = 4
 
-def train_fe_one_epoch(model, device, criterion, optimizer, scheduler, data_loader):
+def validate_fe(model, device, criterion, acc_metric, data_loader):
+    # Set model to evaluating
+    model.eval()
+
+    # Set model loss
+    loss_over_epoch = 0
+    correct = 0
+
+    # Unpacking all inputs and labels to run on the model in batches
+    # The model weights should not be updated, hence running it with no_grad()
+    with torch.no_grad():
+        for inputs, labels in tqdm(data_loader):
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            # Getting model output and computing the loss
+            model_output = model(inputs)
+            loss = criterion(model_output, labels)
+            correct += acc_metric(model_output.argmax(dim=1), labels).item()
+
+            # Adding the loss over the epoch
+            loss_over_epoch += loss.item()
+
+    accuracy = correct / len(data_loader)
+    print("Validation loss = " + str(loss_over_epoch))
+    print("Validation accuracy = " + str(accuracy))
+
+def train_fe_one_epoch(model, device, criterion, optimizer, acc_metric, data_loader):
     # Set model to training phase
     model.train()
 
-    # Setting model loss
+    # Setting model loss and initializing accuracy
     loss_over_epoch = 0
+    correct = 0
     
     # Unpacking all inputs and labels to run on the model in batches
     for inputs, labels in tqdm(data_loader):
@@ -39,15 +68,18 @@ def train_fe_one_epoch(model, device, criterion, optimizer, scheduler, data_load
 
         # Computing the loss and updating the model with a backwards pass
         loss = criterion(model_output, labels)
+        correct += acc_metric(model_output.argmax(dim=1), labels).item()
         loss.backward()
         optimizer.step()
 
-        # Adding the loss over the poch
+        # Adding the loss over the epoch
         loss_over_epoch += loss.item()
 
-    print("Loss = " + str(loss_over_epoch))
+    accuracy = correct / len(data_loader)
+    print("Training loss = " + str(loss_over_epoch))
+    print("Training accuracy = " + str(accuracy))
 
-def train_feature_extractor(model, device, criterion, optimizer, scheduler, train_loader, val_loader):
+def train_feature_extractor(model, device, criterion, optimizer, acc_metric, train_loader, val_loader):
 
     # Setting the preliminary model to be the best model
     best_model = copy.deepcopy(model)
@@ -55,10 +87,10 @@ def train_feature_extractor(model, device, criterion, optimizer, scheduler, trai
     for i in range(EPOCHS):
         print("On epoch " + str(i))
         print("Training phase")
-        train_fe_one_epoch(model, device, criterion, optimizer, scheduler, train_loader)
+        train_fe_one_epoch(model, device, criterion, optimizer, acc_metric, train_loader)
 
-        # print("Validation phase")
-        # Validation function here
+        print("Validation phase")
+        validate_fe(model, device, criterion, acc_metric, val_loader)
 
         # Some metric to check if the validation accuracy is higher than in the previous function
         # Change model back to old model if validation accuracy is worse
@@ -72,7 +104,7 @@ def setup_feature_extractor():
 
     # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
     transform = transforms.Compose([
-        #transforms.Resize(256),
+        transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
@@ -90,22 +122,25 @@ def setup_feature_extractor():
 
     # First using the ready made model from Pytorch
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
+    # Replacing the output classification layer with a 4 class version
+    model.classifier[1] = nn.Linear(in_features=1280, out_features=4)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.98)
+    acc_metric = Accuracy(task="multiclass", num_classes=4)
     model.to(device)
 
-    train_feature_extractor(model, device, criterion, optimizer, scheduler, train_loader, val_loader)
+    train_feature_extractor(model, device, criterion, optimizer, acc_metric, train_loader, val_loader)
 
 def sep_collate(batch):
     _, images, labels, _ = zip(*batch)
     tensor_labels = []
 
-    # Labels are ints, 
+    # Labels are ints, which is why they need to be converted to tensors before being entered into a torch stack
     for label in labels:
         tensor_labels.append(torch.tensor(label))
 
+    # Converting both images and label lists of tensors to torch stacks
     images = torch.stack(list(images), dim = 0)
     labels = torch.stack(list(tensor_labels), dim = 0)
 

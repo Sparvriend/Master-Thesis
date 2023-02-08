@@ -46,5 +46,8 @@ class NTZFilterDataset(Dataset):
         raw_image = Image.open(self.img_paths[idx])
         image = self.transform(raw_image)
         label = self.img_labels[idx]
-        augmentations = self.augmentations[idx]
+        if self.augmentations == []:
+            augmentations = None
+        else:
+            augmentations = self.augmentations[idx]
         return path, image, label, augmentations
