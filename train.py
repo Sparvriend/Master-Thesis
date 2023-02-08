@@ -2,22 +2,67 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from NTZ_filter_dataset import NTZFilterDataset
 from torch.optim import lr_scheduler
+import copy
+from tqdm import tqdm
+
+# TODO:
+# - Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
+# - Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
 
 # File paths
 TRAIN_PATH = "data/train"; VAL_PATH = "data/val"
 
 # General parameters for training
-BATCH_SIZE = 32
-EPOCHS = 100
+BATCH_SIZE = 8
+EPOCHS = 25
 SHUFFLE = True
 NUM_WORKERS = 4
 
-def train_fe_one_run():
+def train_fe_one_epoch(model, device, criterion, optimizer, scheduler, data_loader):
+    # Set model to training phase
+    model.train()
 
+    # Setting model loss
+    loss_over_epoch = 0
+    
+    # Unpacking all inputs and labels to run on the model in batches
+    for inputs, labels in tqdm(data_loader):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
 
-def train_feature_extractor(model, criterion, optimizer, scheduler, train_loader, val_loader):
+        # Resetting model weights and getting the model output
+        optimizer.zero_grad()
+        model_output = model(inputs)
+
+        # Computing the loss and updating the model with a backwards pass
+        loss = criterion(model_output, labels)
+        loss.backward()
+        optimizer.step()
+
+        # Adding the loss over the poch
+        loss_over_epoch += loss.item()
+
+    print("Loss = " + str(loss_over_epoch))
+
+def train_feature_extractor(model, device, criterion, optimizer, scheduler, train_loader, val_loader):
+
+    # Setting the preliminary model to be the best model
+    best_model = copy.deepcopy(model)
+
+    for i in range(EPOCHS):
+        print("On epoch " + str(i))
+        print("Training phase")
+        train_fe_one_epoch(model, device, criterion, optimizer, scheduler, train_loader)
+
+        # print("Validation phase")
+        # Validation function here
+
+        # Some metric to check if the validation accuracy is higher than in the previous function
+        # Change model back to old model if validation accuracy is worse
+        # Change best model to new model if validation accuracy is better
 
 
 def setup_feature_extractor():
@@ -27,7 +72,7 @@ def setup_feature_extractor():
 
     # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
     transform = transforms.Compose([
-        transforms.Resize(256),
+        #transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
@@ -38,21 +83,33 @@ def setup_feature_extractor():
     val_data = NTZFilterDataset(VAL_PATH, transform)
 
     # Creating data loaders for validation and training data
-    train_loader = DataLoader(train_data, batch_size = BATCH_SIZE, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
-    val_loader = DataLoader(val_data, batch_size = BATCH_SIZE, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    train_loader = DataLoader(train_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    val_loader = DataLoader(val_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
 
-    #analyse_dataset(train_data)
+    # analyse_dataset(train_data)
 
     # First using the ready made model from Pytorch
-    model = torch.hub.load('pytorch/vision:v0.10.0', 'mobilenet_v2', pretrained=True)
-    model.eval()
+    model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.98)
     model.to(device)
 
-    train_feature_extractor(model, criterion, optimizer, scheduler, train_loader, val_loader)
+    train_feature_extractor(model, device, criterion, optimizer, scheduler, train_loader, val_loader)
+
+def sep_collate(batch):
+    _, images, labels, _ = zip(*batch)
+    tensor_labels = []
+
+    # Labels are ints, 
+    for label in labels:
+        tensor_labels.append(torch.tensor(label))
+
+    images = torch.stack(list(images), dim = 0)
+    labels = torch.stack(list(tensor_labels), dim = 0)
+
+    return images, labels
 
 # Function to analyse if the NTZFilterDataset class works properly
 def analyse_dataset(dataset):

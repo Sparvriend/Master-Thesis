@@ -52,6 +52,7 @@ def augment_data():
 
             # Applying augmentation with flip and rotation cut off, since that is already applied to the images.
             apply_augmentation(cleaned_files, path, augmentation_techniques[2:])
+    set_grayscale_to_rgb()
             
 def apply_augmentation(files, path, augmentation_techniques):
     # Opening images
@@ -81,7 +82,7 @@ def split_and_move():
     data_location = "NTZ_filter_label_data"
 
     # Setting a maximum of samples for each class (60)
-    max_samples = 60
+    max_samples = 70
 
     for data_class in DATA_CLASSES:
         # Combining path and listing all files in the path
@@ -150,5 +151,4 @@ if __name__ == '__main__':
     # Make sure to run split and move before augment
     # If not, augmentations will be applied to augmented images unregulated
     split_and_move()
-    augment_data()
-    set_grayscale_to_rgb()
+    #augment_data()
