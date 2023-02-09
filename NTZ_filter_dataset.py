@@ -38,9 +38,12 @@ class NTZFilterDataset(Dataset):
                     augments.append(stripped[len(stripped)-1].replace(".bmp", ""))
                 self.augmentations.append(augments)
     
+    # Function to return the length of the dataset
     def __len__(self):
         return len(self.img_labels)
 
+    # Function to return attributes per item in the dataset
+    # The sep_collate function in train.py ensures that for batches, only the label and images are returned.
     def __getitem__(self, idx):
         path = self.img_paths[idx]
         raw_image = Image.open(self.img_paths[idx])
