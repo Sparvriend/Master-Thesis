@@ -17,14 +17,13 @@ from train_utils import save_test_predicts, sep_collate, sep_test_collate
 # - Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
 # - Text detection model for fourth label class?
 # - Uncertainty prediction per image
-# - Combine validation and training functions? -> Move usage of device from start of setup_feature_extractor() to only where it is needed
 
 # File paths
 TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH_LABEL = "data/test"; TEST_PATH_NO_LABEL = "data/test_no_label"
 
 # General parameters for data loaders
 BATCH_SIZE = 8
-EPOCHS = 10
+EPOCHS = 25
 SHUFFLE = True
 NUM_WORKERS = 4
 
@@ -33,51 +32,6 @@ NUM_WORKERS = 4
 # 1: fail_label_half_printed
 # 2: fail_label_not_fully_printed
 # 3: no_fail
-
-# Validation function for the feature extractor
-def validate_fe(model, device, criterion, acc_metric, data_loader):
-    # Set model to evaluating
-    model.eval()
-
-    # Set model metrics to 0
-    loss_over_epoch = 0
-    acc = 0
-    total_imgs = 0
-
-    # Starting the validation timer
-    validation_start = time.time()
-
-    # Unpacking all inputs and labels to run on the model in batches
-    # The model weights should not be updated, hence running it with no_grad()
-    with torch.no_grad():
-        for inputs, labels in tqdm(data_loader):
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-
-            # Getting model output and computing the loss/accuracy
-            model_output = model(inputs)
-            loss = criterion(model_output, labels)
-            predicted_labels = model_output.argmax(dim=1)
-            acc += acc_metric(predicted_labels, labels).item()
-
-            # Adding the loss over the epoch
-            loss_over_epoch += loss.item()
-            
-            # Counting up total amount of images a prediction was made over
-            total_imgs += len(labels)
-    
-    # Getting the validation  time
-    validation_time = time.time() - validation_start
-
-    # Reporting metrics over epoch
-    mean_accuracy = acc / len(data_loader)
-    print("Loss = " + str(loss_over_epoch))
-    print("Accuracy = " + str(mean_accuracy))
-
-    # Reporting fps metric
-    print("FPS = " + str(round(total_imgs/validation_time, 2)))
-
-    return loss_over_epoch
 
 def test_feature_extractor(model, device, data_loader):
     # Set model to evaluating
@@ -112,60 +66,73 @@ def test_feature_extractor(model, device, data_loader):
     # Reporting fps metric
     print("FPS = " + str(round(total_imgs/testing_time, 2)))
 
-# Training function for the feature extractor for one epoch
-def train_fe_one_epoch(model, device, criterion, optimizer, acc_metric, data_loader):
-    # Set model to training phase
-    model.train()
-
-    # Set model metrics to 0
-    loss_over_epoch = 0
-    acc = 0
-    
-    # Unpacking all inputs and labels to run on the model in batches
-    for inputs, labels in tqdm(data_loader):
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        # Resetting model weights and getting the model output
-        optimizer.zero_grad()
-        model_output = model(inputs)
-
-        # Computing the loss/accuracy and updating the model with a backwards pass
-        loss = criterion(model_output, labels)
-        acc += acc_metric(model_output.argmax(dim=1), labels).item()
-        loss.backward()
-        optimizer.step()
-
-        # Adding the loss over the epoch
-        loss_over_epoch += loss.item()
-
-    # Reporting the metrics over one epoch
-    mean_accuracy = acc / len(data_loader)
-    print("Training loss = " + str(loss_over_epoch))
-    print("Training accuracy = " + str(mean_accuracy))
-
-# Function that defines training of feature extractor over epochs
-def train_feature_extractor(model, device, criterion, optimizer, acc_metric, train_loader, val_loader):
+def train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders):
     # Setting the preliminary model to be the best model
-    best_model = copy.deepcopy(model)
     best_loss = 1000
+    best_model = copy.deepcopy(model)
 
-    # Main epoch loop
     for i in range(EPOCHS):
         print("On epoch " + str(i))
-        print("Training phase")
-        train_fe_one_epoch(model, device, criterion, optimizer, acc_metric, train_loader)
+        for phase in ["train", "val"]:
+            if phase == "train":
+                model.train()
+                print("Training phase")
+            else:
+                model.eval()
+                print("Validation phase")
+            
+            # Set model metrics to 0
+            loss_over_epoch = 0
+            acc = 0
+            total_imgs = 0
 
-        print("Validation phase")
-        loss = validate_fe(model, device, criterion, acc_metric, val_loader)
+            # Starting model timer
+            start_time = time.time()
 
-        # Change best model to new model if validation loss is better
-        if best_loss > loss:
-            best_model = copy.deepcopy(model)
-            best_loss = loss
-        # Change model back to old model if validation loss is worse
-        else:
-            model = copy.deepcopy(best_model)
+            for inputs, labels in tqdm(data_loaders[phase]):
+                with torch.set_grad_enabled(phase == "train"):
+                    # Moving data to device
+                    inputs = inputs.to(device)
+                    labels = labels.to(device)
+
+                    optimizer.zero_grad()
+
+                    # Getting model output and labels
+                    model_output = model(inputs)
+                    predicted_labels = model_output.argmax(dim=1)
+                    
+                    # Computing the loss/accuracy
+                    loss = criterion(model_output, labels)
+                    acc += acc_metric(predicted_labels, labels).item()
+                    
+                    # Updating model weights if in training phase
+                    if phase == "train":
+                        loss.backward()
+                        optimizer.step()
+
+                    # Adding the loss over the epoch
+                    loss_over_epoch += loss.item()
+
+                    # Counting up total amount of images a prediction was made over
+                    total_imgs += len(inputs)
+            elapsed_time = time.time() - start_time
+
+            # Reporting metrics over epoch
+            mean_accuracy = acc / len(data_loaders[phase])
+            print("Loss = " + str(loss_over_epoch))
+            print("Accuracy = " + str(mean_accuracy))
+
+            # Reporting fps metric
+            print("FPS = " + str(round(total_imgs/elapsed_time, 2)))
+
+            if phase == "val":
+                # Change best model to new model if validation loss is better
+                if best_loss > loss_over_epoch:
+                    best_model = copy.deepcopy(model)
+                    best_loss = loss_over_epoch
+                # Change model back to old model if validation loss is worse
+                else:
+                    model = copy.deepcopy(best_model)
 
 # Function that defines data loaders based on NTZ_filter_datasets
 def setup_data_loaders():
@@ -192,7 +159,10 @@ def setup_data_loaders():
     # Creating data loader for testing data
     test_loader = DataLoader(test_data_no_labels, batch_size = BATCH_SIZE, collate_fn = sep_test_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
 
-    return train_loader, val_loader, test_loader
+    # Creating a dictionary for the data loaders
+    data_loaders = {"train": train_loader, "val": val_loader, "test": test_loader}
+
+    return data_loaders
 
 # Function that does a setup of all datasets/dataloaders and proceeds to training/validating of the feature extractor
 def setup_feature_extractor():
@@ -201,7 +171,7 @@ def setup_feature_extractor():
     print("Using device: " + str(device))
 
     # Retrieving data loaders
-    train_loader, val_loader, test_loader = setup_data_loaders()
+    data_loaders = setup_data_loaders()
 
     # First using the ready made model from Pytorch
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
@@ -215,11 +185,11 @@ def setup_feature_extractor():
     model.to(device)
 
     # Training the feature extractor
-    train_feature_extractor(model, device, criterion, optimizer, acc_metric, train_loader, val_loader)
+    train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders)
 
     # Testing the feature extractor on testing data
     print("Testing phase")
-    test_feature_extractor(model, device, test_loader)
+    test_feature_extractor(model, device, data_loaders["test"])
 
 if __name__ == '__main__':
     setup_feature_extractor()
