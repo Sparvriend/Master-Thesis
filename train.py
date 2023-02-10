@@ -23,7 +23,7 @@ TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH_LABEL = "data/test";
 
 # General parameters for data loaders
 BATCH_SIZE = 8
-EPOCHS = 25
+EPOCHS = 1000
 SHUFFLE = True
 NUM_WORKERS = 4
 
@@ -70,6 +70,7 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
     # Setting the preliminary model to be the best model
     best_loss = 1000
     best_model = copy.deepcopy(model)
+    early_stop = 0; early_stop_limit = 20
 
     for i in range(EPOCHS):
         print("On epoch " + str(i))
@@ -130,9 +131,15 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
                 if best_loss > loss_over_epoch:
                     best_model = copy.deepcopy(model)
                     best_loss = loss_over_epoch
+                    early_stop = 0
+
                 # Change model back to old model if validation loss is worse
                 else:
                     model = copy.deepcopy(best_model)
+                    early_stop += 1
+                    if early_stop > early_stop_limit:
+                        print("Early stopping ")
+                        return
 
 # Function that defines data loaders based on NTZ_filter_datasets
 def setup_data_loaders():
@@ -188,8 +195,8 @@ def setup_feature_extractor():
     train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders)
 
     # Testing the feature extractor on testing data
-    print("Testing phase")
-    test_feature_extractor(model, device, data_loaders["test"])
+    # print("Testing phase")
+    # test_feature_extractor(model, device, data_loaders["test"])
 
 if __name__ == '__main__':
     setup_feature_extractor()
