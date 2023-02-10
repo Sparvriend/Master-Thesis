@@ -8,26 +8,31 @@ from torchmetrics import Accuracy
 import copy
 from tqdm import tqdm
 import time
+import os
+from train_utils import save_test_predicts, sep_collate, sep_test_collate
 
 # TODO:
 # - Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
 # - Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
-# - Combine validation and training functions?
-# - Write a new testing function that assumes that there are no labels for the images
 # - Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
 # - Text detection model for fourth label class?
 # - Uncertainty prediction per image
-# - Synthetic data creation, since the data provided right now is not robust enough
-# - Move usage of device from start of setup_feature_extractor() to only where it is needed
+# - Combine validation and training functions? -> Move usage of device from start of setup_feature_extractor() to only where it is needed
 
 # File paths
-TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH = "data/test"
+TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH_LABEL = "data/test"; TEST_PATH_NO_LABEL = "data/test_no_label"
 
 # General parameters for data loaders
 BATCH_SIZE = 8
 EPOCHS = 10
 SHUFFLE = True
 NUM_WORKERS = 4
+
+# Classes:
+# 0: fail_label_crooked_print
+# 1: fail_label_half_printed
+# 2: fail_label_not_fully_printed
+# 3: no_fail
 
 # Validation function for the feature extractor
 def validate_fe(model, device, criterion, acc_metric, data_loader):
@@ -73,6 +78,39 @@ def validate_fe(model, device, criterion, acc_metric, data_loader):
     print("FPS = " + str(round(total_imgs/validation_time, 2)))
 
     return loss_over_epoch
+
+def test_feature_extractor(model, device, data_loader):
+    # Set model to evaluating
+    model.eval()
+
+    # Measuring images classified for speed measurement
+    total_imgs = 0
+
+    # Starting the validation timer
+    validation_start = time.time()
+
+    # Clearing file contents of test_predicts.txt if it exists
+    open(os.path.join(TEST_PATH_NO_LABEL, "test_predicts.txt"), "w") 
+
+    with torch.no_grad():
+        for inputs, paths in tqdm(data_loader):
+            inputs = inputs.to(device)
+
+            # Getting model output and labels
+            model_output = model(inputs)
+            predicted_labels = model_output.argmax(dim=1)
+    
+            # Counting up total amount of images a prediction was made over
+            total_imgs += len(inputs)
+
+            # Saving predictions to a txt file
+            save_test_predicts(predicted_labels, paths)
+
+    # Getting the validation  time
+    testing_time = time.time() - validation_start
+
+    # Reporting fps metric
+    print("FPS = " + str(round(total_imgs/testing_time, 2)))
 
 # Training function for the feature extractor for one epoch
 def train_fe_one_epoch(model, device, criterion, optimizer, acc_metric, data_loader):
@@ -129,12 +167,8 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, tra
         else:
             model = copy.deepcopy(best_model)
 
-# Function that does a setup of all datasets/dataloaders and proceeds to training/validating of the feature extractor
-def setup_feature_extractor():
-    # First setting the device to use
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print("Using device: " + str(device))
-
+# Function that defines data loaders based on NTZ_filter_datasets
+def setup_data_loaders():
     # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
     transform = transforms.Compose([
         transforms.Resize(256),
@@ -147,15 +181,27 @@ def setup_feature_extractor():
     train_data = NTZFilterDataset(TRAIN_PATH, transform)
     val_data = NTZFilterDataset(VAL_PATH, transform)
 
-    # Dataset for testing class, does have labels however
-    test_data = NTZFilterDataset(TEST_PATH, transform)
+    # Dataset for testing class, with labels
+    # test_data_label = NTZFilterDataset(TEST_PATH_LABEL, transform)
+    test_data_no_labels = NTZFilterDataset(TEST_PATH_NO_LABEL, transform)
 
     # Creating data loaders for validation and training data
     train_loader = DataLoader(train_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
     val_loader = DataLoader(val_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
 
     # Creating data loader for testing data
-    test_loader = DataLoader(test_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    test_loader = DataLoader(test_data_no_labels, batch_size = BATCH_SIZE, collate_fn = sep_test_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+
+    return train_loader, val_loader, test_loader
+
+# Function that does a setup of all datasets/dataloaders and proceeds to training/validating of the feature extractor
+def setup_feature_extractor():
+    # First setting the device to use
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("Using device: " + str(device))
+
+    # Retrieving data loaders
+    train_loader, val_loader, test_loader = setup_data_loaders()
 
     # First using the ready made model from Pytorch
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
@@ -173,23 +219,7 @@ def setup_feature_extractor():
 
     # Testing the feature extractor on testing data
     print("Testing phase")
-    validate_fe(model, device, criterion, acc_metric, test_loader)
-
-# Manual replacement of default collate function provided by PyTorch
-# The function removes the augmentation and the path that is normally returned by using __getitem__ as well as transforming to lists of tensors
-def sep_collate(batch):
-    _, images, labels, _ = zip(*batch)
-    tensor_labels = []
-
-    # Labels are ints, which is why they need to be converted to tensors before being entered into a torch stack
-    for label in labels:
-        tensor_labels.append(torch.tensor(label))
-
-    # Converting both images and label lists of tensors to torch stacks
-    images = torch.stack(list(images), dim = 0)
-    labels = torch.stack(list(tensor_labels), dim = 0)
-
-    return images, labels
+    test_feature_extractor(model, device, test_loader)
 
 if __name__ == '__main__':
     setup_feature_extractor()
