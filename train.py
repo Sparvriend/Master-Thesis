@@ -9,7 +9,7 @@ import copy
 from tqdm import tqdm
 import time
 import os
-from train_utils import save_test_predicts, sep_collate, sep_test_collate
+from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_random_transforms
 
 # TODO:
 # - Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
@@ -143,8 +143,12 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
 
 # Function that defines data loaders based on NTZ_filter_datasets
 def setup_data_loaders():
+    # Defining a list of randomly applicable transforms
+    random_transforms = get_random_transforms()
+
     # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
     transform = transforms.Compose([
+        transforms.RandomApply(random_transforms, p = 0.5),
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
@@ -195,8 +199,8 @@ def setup_feature_extractor():
     train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders)
 
     # Testing the feature extractor on testing data
-    # print("Testing phase")
-    # test_feature_extractor(model, device, data_loaders["test"])
+    print("Testing phase")
+    test_feature_extractor(model, device, data_loaders["test"])
 
 if __name__ == '__main__':
     setup_feature_extractor()

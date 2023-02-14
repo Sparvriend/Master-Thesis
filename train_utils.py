@@ -1,3 +1,6 @@
+from PIL import Image, ImageOps, ImageEnhance
+import torchvision.transforms as T
+import torchvision.transforms.functional as TF
 import torch
 import os
 
@@ -15,7 +18,7 @@ def save_test_predicts(predicted_labels, paths):
 # Manual replacement of default collate function provided by PyTorch
 # The function removes the augmentation and the path that is normally returned by using __getitem__ as well as transforming to lists of tensors
 def sep_collate(batch):
-    _, images, labels, _ = zip(*batch)
+    _, images, labels = zip(*batch)
     tensor_labels = []
 
     # Labels are ints, which is why they need to be converted to tensors before being entered into a torch stack
@@ -30,9 +33,27 @@ def sep_collate(batch):
 
 # Manual collate function for testing dataloader
 def sep_test_collate(batch):
-    path, images, _, _ = zip(*batch)
+    path, images, _ = zip(*batch)
 
     # Converting image lists of tensors to torch stack
     images = torch.stack(list(images), dim = 0)
 
     return images, path
+
+def get_random_transforms():
+    # augmentations = torch.nn.ModuleList([Image.Image().rotate(180), Image.Image().transpose(Image.FLIP_TOP_BOTTOM), Image.Image().convert('L'),
+    #                                      ImageOps.autocontrast(),  ImageOps.invert(), ImageOps.equalize(),
+    #                                      ImageOps.solarize(128), ImageOps.posterize(4), ImageOps.posterize(3),   
+    #                                      ImageEnhance.Color(0.5), ImageEnhance.Contrast(0.5), ImageEnhance.Brightness(0.5),
+    #                                      ImageEnhance.Brightness(0.75), ImageEnhance.Sharpness(0), ImageEnhance.Sharpness(2)])
+
+    augmentations = torch.nn.ModuleList([T.RandomRotation((0, 360)), T.Grayscale(3)])
+
+    # Pytorch augmentations listed:
+    # - T.RandomAutocontrast()
+    # - T.RandomInvert()  
+    # - T.RandomEqualize()  
+    # - T.RandomSolarize(192)     
+    # - T.RandomPosterize(2)
+
+    return augmentations
