@@ -12,28 +12,12 @@ class NTZFilterDataset(Dataset):
         self.data_type = os.path.normpath(data_path).split(os.sep)[1]
         self.transform = transform  
 
-        # If testing data, then only create the paths
-        if data_path.endswith("test_no_label"):
-            for file_name in os.listdir(data_path):
-                # Omitting the .txt file with test predictions if it exists
-                if file_name.endswith(".bmp"):
-                    self.img_paths.append(os.path.join(data_path, file_name))
-
-        # If training/validating data, also create the labels and augmentation for training
-        else:
-            # Listing class directories
-            dir_names = []
-            for dir_name in os.listdir(data_path):
-                if os.path.isdir(os.path.join(data_path, dir_name)):
-                    dir_names.append(dir_name)
-            
-            # Setting the paths for each image and a label for each image
-            label = 0
-            for dir_name in dir_names:
-                for file_name in os.listdir(os.path.join(data_path, dir_name)):
-                    self.img_paths.append(os.path.join(data_path, dir_name, file_name))
+        # Setting the paths for each image and a label if it concerns training or validation data, labels are enumerated over
+        for label, dir_name in enumerate(os.listdir(data_path)):
+            for file_name in os.listdir(os.path.join(data_path, dir_name)):
+                self.img_paths.append(os.path.join(data_path, dir_name, file_name))
+                if self.data_type == "train" or self.data_type == "val":
                     self.img_labels.append(label)
-                label += 1
 
     # Function to return the length of the dataset
     def __len__(self):
@@ -57,12 +41,15 @@ class NTZFilterDataset(Dataset):
             PIL_image = to_PIL(image_copy)
             img_name = os.path.normpath(path).split(os.sep)[-1]
             PIL_image.save(os.path.join("augmented_images", img_name))
-        else:
-            image = transforms.Compose(self.transform.transforms[1:])(raw_image)
 
-        if self.img_labels == []:
-            label = None
-        else:
+            # Saving the label
             label = self.img_labels[idx]
+        else:
+            # Performing the normal transform without augmentation and saving the label if it exists
+            image = transforms.Compose(self.transform.transforms[1:])(raw_image)
+            if self.data_type == "val":
+                label = self.img_labels[idx]
+            else:
+                label = None
 
         return path, image, label

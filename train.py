@@ -9,21 +9,21 @@ import copy
 from tqdm import tqdm
 import time
 import os
-from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_random_transforms
+from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_transforms
 
-# TODO:
-# - Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
-# - Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
-# - Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
-# - Text detection model for fourth label class?
-# - Uncertainty prediction per image
+# TODO: Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
+# TODO: Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
+# TODO: Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
+# TODO: Text detection model for fourth label class?
+# TODO: Uncertainty prediction per image
+# TODO: Adapt testing function such that it does not print a txt file but rather moves predictions to folders in a prediction folder
 
 # File paths
-TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH_LABEL = "data/test"; TEST_PATH_NO_LABEL = "data/test_no_label"
+TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH = "data/test"
 
 # General parameters for data loaders
 BATCH_SIZE = 8
-EPOCHS = 1000
+EPOCHS = 2
 SHUFFLE = True
 NUM_WORKERS = 4
 
@@ -43,23 +43,25 @@ def test_feature_extractor(model, device, data_loader):
     # Starting the validation timer
     validation_start = time.time()
 
-    # Clearing file contents of test_predicts.txt if it exists
-    open(os.path.join(TEST_PATH_NO_LABEL, "test_predicts.txt"), "w") 
+    # Creating a list of paths and predicted labels
+    predicted_labels = []
+    img_paths = []
 
     with torch.no_grad():
         for inputs, paths in tqdm(data_loader):
             inputs = inputs.to(device)
 
-            # Getting model output and labels
+            # Getting model output and adding labels/paths to lists
             model_output = model(inputs)
-            predicted_labels = model_output.argmax(dim=1)
+            predicted_labels.append(model_output.argmax(dim=1))
+            img_paths.append(paths)
     
             # Counting up total amount of images a prediction was made over
             total_imgs += len(inputs)
 
-            # Saving predictions to a txt file
-            save_test_predicts(predicted_labels, paths)
-
+    # Saving the test predictions
+    save_test_predicts(predicted_labels, img_paths)
+    
     # Getting the validation  time
     testing_time = time.time() - validation_start
 
@@ -143,32 +145,22 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
 
 # Function that defines data loaders based on NTZ_filter_datasets
 def setup_data_loaders():
-    # Defining a list of randomly applicable transforms
-    random_transforms = get_random_transforms()
-
-    # Defining transforms for training data based on information from https://pytorch.org/hub pytorch_vision_mobilenet_v2/
-    transform = transforms.Compose([
-        transforms.RandomApply(random_transforms, p = 0.5),
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
-    ])
+    # Defining the list of transforms
+    transform = get_transforms()
 
     # Creating datasets for validation and training data, based on NTZFilterDataset class
     train_data = NTZFilterDataset(TRAIN_PATH, transform)
     val_data = NTZFilterDataset(VAL_PATH, transform)
 
     # Dataset for testing class, with labels
-    # test_data_label = NTZFilterDataset(TEST_PATH_LABEL, transform)
-    test_data_no_labels = NTZFilterDataset(TEST_PATH_NO_LABEL, transform)
+    test_data_label = NTZFilterDataset(TEST_PATH, transform)
 
     # Creating data loaders for validation and training data
     train_loader = DataLoader(train_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
     val_loader = DataLoader(val_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
 
     # Creating data loader for testing data
-    test_loader = DataLoader(test_data_no_labels, batch_size = BATCH_SIZE, collate_fn = sep_test_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    test_loader = DataLoader(test_data_label, batch_size = BATCH_SIZE, collate_fn = sep_test_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
 
     # Creating a dictionary for the data loaders
     data_loaders = {"train": train_loader, "val": val_loader, "test": test_loader}

@@ -3,10 +3,9 @@ import os
 from os import listdir
 import numpy as np
 import random
-from PIL import Image, ImageOps, ImageEnhance
 
 # First forming file paths for destinations of training, testing and validation data
-TRAIN_DESTINATION = "data/train"; VAL_DESTINATION = "data/val"; TEST_DESTINATION = "data/test"; TEST_NO_LABEL_DESTINATION = "data/test_no_label"
+TRAIN_DESTINATION = "data/train"; VAL_DESTINATION = "data/val"; TEST_DESTINATION = "data/test"
 
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION = "NTZ_filter_label_data"
@@ -65,7 +64,6 @@ def split_and_move():
             destination_path = os.path.join(TEST_DESTINATION, data_class)
             file_path = os.path.join(data_location, data_class, test_file)
             shutil.copy(file_path, destination_path)
-            shutil.copy(file_path, TEST_NO_LABEL_DESTINATION)
 
 if __name__ == '__main__':
     # Make sure to run split and move before augment

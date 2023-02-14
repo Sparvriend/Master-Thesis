@@ -4,3 +4,4 @@ preliminary_pipeline
 token.txt
 __pycache__/
 augmented_images/
+toy_problem.py
