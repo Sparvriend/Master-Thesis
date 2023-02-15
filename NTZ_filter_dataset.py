@@ -14,10 +14,11 @@ class NTZFilterDataset(Dataset):
 
         # Setting the paths for each image and a label if it concerns training or validation data, labels are enumerated over
         for label, dir_name in enumerate(os.listdir(data_path)):
-            for file_name in os.listdir(os.path.join(data_path, dir_name)):
-                self.img_paths.append(os.path.join(data_path, dir_name, file_name))
-                if self.data_type == "train" or self.data_type == "val":
-                    self.img_labels.append(label)
+            if dir_name != "test_predictions":
+                for file_name in os.listdir(os.path.join(data_path, dir_name)):
+                    self.img_paths.append(os.path.join(data_path, dir_name, file_name))
+                    if self.data_type == "train" or self.data_type == "val":
+                        self.img_labels.append(label)
 
     # Function to return the length of the dataset
     def __len__(self):

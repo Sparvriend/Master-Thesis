@@ -11,12 +11,10 @@ import time
 import os
 from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_transforms
 
-# TODO: Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
-# TODO: Use on the fly augmentation instead of fixed augmentations (per epoch) for each image (Ratnajit would send tutorial)
 # TODO: Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
-# TODO: Text detection model for fourth label class?
 # TODO: Uncertainty prediction per image
-# TODO: Adapt testing function such that it does not print a txt file but rather moves predictions to folders in a prediction folder
+# TODO: Text detection model for fourth label class?
+# TODO: Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
 
 # File paths
 TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH = "data/test"
