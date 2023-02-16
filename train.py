@@ -1,29 +1,23 @@
-import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
-from NTZ_filter_dataset import NTZFilterDataset
-from torchmetrics import Accuracy
 import copy
-from tqdm import tqdm
+import torch
 import time
-import os
+from torch import nn, optim
+from torchmetrics import Accuracy
+from torch.utils.data import DataLoader
+import torchvision
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+from tqdm import tqdm
+
+from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_transforms
 
-# TODO: Create synthetic data -> for each class, move the filter across the screen and the label across the filter (where applicable)
+# TODO: Change procedural augmentation method such that there is also a chance that an image is not augmented at all
+# TODO: Create synthetic data -> for each class, move the filter across
+#       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
 # TODO: Text detection model for fourth label class?
-# TODO: Use Tensorboard for implementing different experiments (Ratnajit would send tutorial)
-
-# File paths
-TRAIN_PATH = "data/train"; VAL_PATH = "data/val"; TEST_PATH = "data/test"
-
-# General parameters for data loaders
-BATCH_SIZE = 8
-EPOCHS = 2
-SHUFFLE = True
-NUM_WORKERS = 4
+# TODO: Use Tensorboard for implementing different experiments
+# TODO: Implement classifier setup (multiple different classifiers)
 
 # Classes:
 # 0: fail_label_crooked_print
@@ -31,20 +25,31 @@ NUM_WORKERS = 4
 # 2: fail_label_not_fully_printed
 # 3: no_fail
 
-def test_feature_extractor(model, device, data_loader):
-    # Set model to evaluating
+# Setting the amount of training epochs
+EPOCHS = 50
+
+def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader):
+    """Function that tests the feature extractor model on the test dataset.
+    It runs through a forward pass to get the model output and saves the
+    output images to appropriate directories through the save_test_predicts
+    function.
+
+    Args:
+        model: The model to test.
+        device: The device which data/model is present on.
+        data_loader: The data loader contains the data to test on.
+    """
+    # Set model to evaluatingm, set speed measurement variable
+    # and starting the timer
     model.eval()
-
-    # Measuring images classified for speed measurement
     total_imgs = 0
-
-    # Starting the validation timer
     validation_start = time.time()
 
     # Creating a list of paths and predicted labels
     predicted_labels = []
     img_paths = []
 
+    print("Testing phase")
     with torch.no_grad():
         for inputs, paths in tqdm(data_loader):
             inputs = inputs.to(device)
@@ -57,20 +62,35 @@ def test_feature_extractor(model, device, data_loader):
             # Counting up total amount of images a prediction was made over
             total_imgs += len(inputs)
 
-    # Saving the test predictions
+    # Saving the test predictions, getting the testing time and
+    # printing the fps
     save_test_predicts(predicted_labels, img_paths)
-    
-    # Getting the validation  time
     testing_time = time.time() - validation_start
+    print("FPS = " + str(round(total_imgs / testing_time, 2)))
 
-    # Reporting fps metric
-    print("FPS = " + str(round(total_imgs/testing_time, 2)))
 
-def train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders):
+def train_model(model: torchvision.models, device: torch.device,
+                criterion: nn.CrossEntropyLoss, optimizer: optim.SGD, 
+                acc_metric: Accuracy, data_loaders: dict):
+    """Function that improves the model through training and validation.
+    Includes early stopping, iteration model saving only on improvement,
+    performance metrics saving and timing.
+
+    Args:
+        model: Pretrained image classification model.
+        device: The device which data/model is present on.
+        criterion: Cross Entropy Loss function
+        optimizer: Stochastic Gradient Descent optimizer (descents in
+                   opposite direction of steepest gradient).
+        acc_metric: Accuracy measurement between predicted and actual labels.
+        data_loaders: Dictionary containing the train, validation and test
+                      data loaders.
+    """
     # Setting the preliminary model to be the best model
     best_loss = 1000
     best_model = copy.deepcopy(model)
-    early_stop = 0; early_stop_limit = 20
+    early_stop = 0
+    early_stop_limit = 20
 
     for i in range(EPOCHS):
         print("On epoch " + str(i))
@@ -82,12 +102,10 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
                 model.eval()
                 print("Validation phase")
             
-            # Set model metrics to 0
+            # Set model metrics to 0 and starting model timer
             loss_over_epoch = 0
             acc = 0
             total_imgs = 0
-
-            # Starting model timer
             start_time = time.time()
 
             for inputs, labels in tqdm(data_loaders[phase]):
@@ -111,20 +129,17 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
                         loss.backward()
                         optimizer.step()
 
-                    # Adding the loss over the epoch
+                    # Adding the loss over the epoch and counting
+                    # total images a prediction was made over
                     loss_over_epoch += loss.item()
-
-                    # Counting up total amount of images a prediction was made over
                     total_imgs += len(inputs)
+            
+            # Measuring elapsed time and reporting metrics over epoch
             elapsed_time = time.time() - start_time
-
-            # Reporting metrics over epoch
             mean_accuracy = acc / len(data_loaders[phase])
             print("Loss = " + str(loss_over_epoch))
             print("Accuracy = " + str(mean_accuracy))
-
-            # Reporting fps metric
-            print("FPS = " + str(round(total_imgs/elapsed_time, 2)))
+            print("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
 
             if phase == "val":
                 # Change best model to new model if validation loss is better
@@ -141,56 +156,81 @@ def train_feature_extractor(model, device, criterion, optimizer, acc_metric, dat
                         print("Early stopping ")
                         return
 
-# Function that defines data loaders based on NTZ_filter_datasets
-def setup_data_loaders():
+
+def setup_data_loaders() -> dict:
+    """Function that defines data loaders based on NTZFilterDataset class. It
+    combines the data loaders in a dictionary.
+
+    Returns:
+        Dictionary of the training, validation and testing data loaders.
+    """
     # Defining the list of transforms
     transform = get_transforms()
 
-    # Creating datasets for validation and training data, based on NTZFilterDataset class
-    train_data = NTZFilterDataset(TRAIN_PATH, transform)
-    val_data = NTZFilterDataset(VAL_PATH, transform)
+    # File paths
+    train_path = "data/train"
+    val_path = "data/val"
+    test_path = "data/test"
 
-    # Dataset for testing class, with labels
-    test_data_label = NTZFilterDataset(TEST_PATH, transform)
+    # General parameters for data_loaders
+    batch_size = 8
+    shuffle = True
+    num_workers = 4
 
-    # Creating data loaders for validation and training data
-    train_loader = DataLoader(train_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
-    val_loader = DataLoader(val_data, batch_size = BATCH_SIZE, collate_fn = sep_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    # Creating datasets for training, validation and testing data,
+    # based on NTZFilterDataset class.
+    train_data = NTZFilterDataset(train_path, transform)
+    val_data = NTZFilterDataset(val_path, transform)
+    test_data = NTZFilterDataset(test_path, transform)
 
-    # Creating data loader for testing data
-    test_loader = DataLoader(test_data_label, batch_size = BATCH_SIZE, collate_fn = sep_test_collate, shuffle = SHUFFLE, num_workers = NUM_WORKERS)
+    # Creating data loaders for training, validation and testing data
+    train_loader = DataLoader(train_data, batch_size = batch_size,
+                              collate_fn = sep_collate, shuffle = shuffle,
+                              num_workers = num_workers)
+    val_loader = DataLoader(val_data, batch_size = batch_size,
+                            collate_fn = sep_collate, shuffle = shuffle,
+                            num_workers = num_workers)
+    test_loader = DataLoader(test_data, batch_size = batch_size,
+                             collate_fn = sep_test_collate, shuffle = shuffle,
+                            num_workers = num_workers)
 
     # Creating a dictionary for the data loaders
-    data_loaders = {"train": train_loader, "val": val_loader, "test": test_loader}
-
+    data_loaders = {"train": train_loader, "val": val_loader,
+                    "test": test_loader}
     return data_loaders
 
-# Function that does a setup of all datasets/dataloaders and proceeds to training/validating of the feature extractor
-def setup_feature_extractor():
-    # First setting the device to use
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def setup_model():
+    """Function that does a setup of all datasets/dataloaders and proceeds to
+    training/validating of the image classification model.
+    """
+
+    # Setting the device to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
     # Retrieving data loaders
     data_loaders = setup_data_loaders()
 
-    # First using the ready made model from Pytorch
+    # Using MobileNetV2 pretrained model from PyTorch
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
     # Replacing the output classification layer with a 4 class version
-    model.classifier[1] = nn.Linear(in_features=1280, out_features=4)
+    model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
 
-    # Defining model criterion as well as weight updater (SGD) and transferring the model to the device
+    # Defining model criterion as well as weight updater (SGD)
+    # and transferring the model to the device
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001)
-    acc_metric = Accuracy(task="multiclass", num_classes=4).to(device)
+    optimizer = optim.SGD(model.parameters(), lr = 0.001, 
+                          momentum = 0.9, weight_decay = 0.001)
+    acc_metric = Accuracy(task="multiclass", num_classes = 4).to(device)
     model.to(device)
 
     # Training the feature extractor
-    train_feature_extractor(model, device, criterion, optimizer, acc_metric, data_loaders)
+    train_model(model, device, criterion, optimizer, acc_metric, data_loaders)
 
     # Testing the feature extractor on testing data
-    print("Testing phase")
-    test_feature_extractor(model, device, data_loaders["test"])
+    test_model(model, device, data_loaders["test"])
+
 
 if __name__ == '__main__':
-    setup_feature_extractor()
+    setup_model()
