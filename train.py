@@ -11,12 +11,13 @@ from tqdm import tqdm
 from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_transforms
 
-# TODO: Change procedural augmentation method such that there is also a chance that an image is not augmented at all
+# TODO: Use Tensorboard for implementing different experiments 
+#       -> top1/top5 acc percentage and loss 
+#       -> also save model per 2 epochs
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
 # TODO: Text detection model for fourth label class?
-# TODO: Use Tensorboard for implementing different experiments
 # TODO: Implement classifier setup (multiple different classifiers)
 
 # Classes:
@@ -26,7 +27,7 @@ from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_t
 # 3: no_fail
 
 # Setting the amount of training epochs
-EPOCHS = 50
+EPOCHS = 100
 
 def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader):
     """Function that tests the feature extractor model on the test dataset.
@@ -137,8 +138,8 @@ def train_model(model: torchvision.models, device: torch.device,
             # Measuring elapsed time and reporting metrics over epoch
             elapsed_time = time.time() - start_time
             mean_accuracy = acc / len(data_loaders[phase])
-            print("Loss = " + str(loss_over_epoch))
-            print("Accuracy = " + str(mean_accuracy))
+            print("Loss = " + str(round(loss_over_epoch, 2)))
+            print("Accuracy = " + str(round(mean_accuracy, 2)))
             print("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
 
             if phase == "val":
@@ -173,7 +174,7 @@ def setup_data_loaders() -> dict:
     test_path = "data/test"
 
     # General parameters for data_loaders
-    batch_size = 8
+    batch_size = 32
     shuffle = True
     num_workers = 4
 

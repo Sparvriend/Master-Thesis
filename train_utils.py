@@ -112,30 +112,38 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
     """This function splits up augmentation into four phases, each with
     different general augmentation techniques. The idea behind it is to only
     select one augmentation from each phase, to ensure that the images are
-    still classifiable after augmentation.
+    still classifiable after augmentation. Each phase also contains a dummy
+    lambda option, which is to ensure that sometimes no augmentation is
+    applied for a phase.
+
+    Vertical flip is removed from phase 1. Phase 4 should only be utilized
+    later, since it comprises adverserial training of the model which is
+    not a focus in early stages.
 
     Returns:
         A composed element of PyTorch RandomChoices for each category and
         the combined list of categorical tarnsforms.
     """
     # Augmentations phase 1 (moving the image around):
-    transforms_phase_1 = [T.RandomRotation(degrees = (0, 360)),
+    transforms_phase_1 = [T.RandomRotation(degrees = (0, 30)),
                           T.RandomHorizontalFlip(p = 1.0),
-                          T.RandomVerticalFlip(p = 1.0),
                           T.RandomAffine(degrees = 0, translate = (0.1, 0.3),
-                                         scale = (0.75, 1.0), shear = (0, 0.2))]
+                                         scale = (0.75, 1.0), shear = (0, 0.2)),
+                          T.Lambda(lambda x: x)]
     
     # Augmentations phase 2 (Simple color changes)
     transforms_phase_2 = [T.Grayscale(num_output_channels = 3), 
                           T.RandomAdjustSharpness(sharpness_factor = 2, p = 1.0),
-                          T.RandomAutocontrast(p = 1.0), T.RandomEqualize(p = 1.0)]
+                          T.RandomAutocontrast(p = 1.0), T.RandomEqualize(p = 1.0),
+                          T.Lambda(lambda x: x)]
 
     # Augmentations phase 3 (Advanced color changes)
     transforms_phase_3 = [T.RandomInvert(p = 1.0), 
                           T.RandomPosterize(3, p = 1.0),
                           T.RandomSolarize(threshold = random.randint(100, 200), p = 0.5),
                           T.ColorJitter(brightness = (0.3, 1), contrast = (0.3, 1),
-                                        saturation = (0.3, 1), hue = (-0.5, 0.5))]
+                                        saturation = (0.3, 1), hue = (-0.5, 0.5)),
+                          T.Lambda(lambda x: x)]
 
     # Augmentations phase 4 (Adding noise)
     # From the imagecorruption library https://github.com/bethgelab/imagecorruptions
@@ -145,16 +153,16 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
                           CustomCorruption(corruption_name = "motion_blur"),
                           CustomCorruption(corruption_name = "zoom_blur"),
                           CustomCorruption(corruption_name = "pixelate"),
-                          CustomCorruption(corruption_name = "jpeg_compression")]
+                          CustomCorruption(corruption_name = "jpeg_compression"),
+                          T.Lambda(lambda x: x)]
 
     # Combining categorical transforms into one list
     # and combining into a composed element of random choices
     combined_transforms = transforms_phase_1 + transforms_phase_2 + \
-                          transforms_phase_3 + transforms_phase_4
+                          transforms_phase_3
     categorical_transforms = T.Compose([T.RandomChoice(transforms_phase_1),
                                         T.RandomChoice(transforms_phase_2),
-                                        T.RandomChoice(transforms_phase_3),
-                                        T.RandomChoice(transforms_phase_4)])
+                                        T.RandomChoice(transforms_phase_3)])
 
     return combined_transforms, categorical_transforms
 
