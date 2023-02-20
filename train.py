@@ -9,11 +9,10 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
-from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_transforms
+from train_utils import save_test_predicts, sep_collate, sep_test_collate, \
+                        get_transforms, setup_tensorboard, setup_hyp_file
 
-# TODO: Use Tensorboard for implementing different experiments 
-#       -> top1/top5 acc percentage and loss 
-#       -> also save model per 2 epochs
+# TODO: Set tensorboard experiments to use a name from input arguments
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
@@ -26,8 +25,13 @@ from train_utils import save_test_predicts, sep_collate, sep_test_collate, get_t
 # 2: fail_label_not_fully_printed
 # 3: no_fail
 
-# Setting the amount of training epochs
-EPOCHS = 100
+# General parameters for model usage
+EPOCHS = 1000
+BATCH_SIZE = 32
+SHUFFLE = True
+NUM_WORKERS = 4
+EXPERIMENT_NAME = "MobileNetDefault"
+AUGMENTATION_TYPE = "categorical"
 
 def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader):
     """Function that tests the feature extractor model on the test dataset.
@@ -72,7 +76,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
 
 def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD, 
-                acc_metric: Accuracy, data_loaders: dict):
+                acc_metric: Accuracy, data_loaders: dict, tensorboard_writers: dict):
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -91,7 +95,7 @@ def train_model(model: torchvision.models, device: torch.device,
     best_loss = 1000
     best_model = copy.deepcopy(model)
     early_stop = 0
-    early_stop_limit = 20
+    early_stop_limit = 100
 
     for i in range(EPOCHS):
         print("On epoch " + str(i))
@@ -156,6 +160,14 @@ def train_model(model: torchvision.models, device: torch.device,
                     if early_stop > early_stop_limit:
                         print("Early stopping ")
                         return
+            # Writing results to tensorboard
+            writer = tensorboard_writers[phase]
+            writer.add_scalar("Loss", loss.item(), i)
+            writer.add_scalar("Accuracy", mean_accuracy, i)
+    
+    # Closing tensorboard writers
+    for writer in tensorboard_writers:
+        writer.close()
 
 
 def setup_data_loaders() -> dict:
@@ -166,17 +178,12 @@ def setup_data_loaders() -> dict:
         Dictionary of the training, validation and testing data loaders.
     """
     # Defining the list of transforms
-    transform = get_transforms()
+    transform = get_transforms(AUGMENTATION_TYPE)
 
     # File paths
     train_path = "data/train"
     val_path = "data/val"
     test_path = "data/test"
-
-    # General parameters for data_loaders
-    batch_size = 32
-    shuffle = True
-    num_workers = 4
 
     # Creating datasets for training, validation and testing data,
     # based on NTZFilterDataset class.
@@ -185,15 +192,15 @@ def setup_data_loaders() -> dict:
     test_data = NTZFilterDataset(test_path, transform)
 
     # Creating data loaders for training, validation and testing data
-    train_loader = DataLoader(train_data, batch_size = batch_size,
-                              collate_fn = sep_collate, shuffle = shuffle,
-                              num_workers = num_workers)
-    val_loader = DataLoader(val_data, batch_size = batch_size,
-                            collate_fn = sep_collate, shuffle = shuffle,
-                            num_workers = num_workers)
-    test_loader = DataLoader(test_data, batch_size = batch_size,
-                             collate_fn = sep_test_collate, shuffle = shuffle,
-                            num_workers = num_workers)
+    train_loader = DataLoader(train_data, batch_size = BATCH_SIZE,
+                              collate_fn = sep_collate, shuffle = SHUFFLE,
+                              num_workers = NUM_WORKERS)
+    val_loader = DataLoader(val_data, batch_size = BATCH_SIZE,
+                            collate_fn = sep_collate, shuffle = SHUFFLE,
+                            num_workers = NUM_WORKERS)
+    test_loader = DataLoader(test_data, batch_size = BATCH_SIZE,
+                             collate_fn = sep_test_collate, shuffle = SHUFFLE,
+                            num_workers = NUM_WORKERS)
 
     # Creating a dictionary for the data loaders
     data_loaders = {"train": train_loader, "val": val_loader,
@@ -226,8 +233,17 @@ def setup_model():
     acc_metric = Accuracy(task="multiclass", num_classes = 4).to(device)
     model.to(device)
 
+    # Setting up the tensorboard writers and the hyperparameter writing
+    tensorboard_writers = setup_tensorboard(EXPERIMENT_NAME)
+    hyp_dict = {"Model": model, "Criterion": criterion, "Optimizer": optimizer,
+                "Epochs": EPOCHS, "Batch Size": BATCH_SIZE, "Shuffle": SHUFFLE,
+                "Num Workers": NUM_WORKERS, "Weights": MobileNet_V2_Weights.DEFAULT,
+                "Augmentation": AUGMENTATION_TYPE}
+    setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
+
     # Training the feature extractor
-    train_model(model, device, criterion, optimizer, acc_metric, data_loaders)
+    train_model(model, device, criterion, optimizer, acc_metric, data_loaders,
+                tensorboard_writers)
 
     # Testing the feature extractor on testing data
     test_model(model, device, data_loaders["test"])

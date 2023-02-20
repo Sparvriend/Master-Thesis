@@ -1,8 +1,10 @@
+import datetime
 import numpy as np
 import os
 from PIL import Image
 import random
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as T
 
 from imagecorruptions import corrupt
@@ -106,6 +108,38 @@ def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
     images = torch.stack(list(images), dim = 0)
 
     return images, path
+
+
+def setup_tensorboard(experiment_name: str) -> list[SummaryWriter]:
+    """Function that provides tensorboard writers for training and validation.
+    
+    Args:
+        experiment_name: Name of the experiment that is run.
+    Returns:
+        List of tensorboard writers.
+    """
+    
+    current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
+    train_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/train'
+    val_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/val'
+    hyp_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/hyp'
+    train_writer = SummaryWriter(train_dir)
+    validation_writer = SummaryWriter(val_dir)
+    hyp_writer = SummaryWriter(hyp_dir)
+
+    return {"train": train_writer, "val": validation_writer, "hyp": hyp_writer}
+
+
+def setup_hyp_file(writer: SummaryWriter, hyp_dict: dict):
+    """Function that writes all hyperparameters for a run to the tensorboard
+    text plugin.
+
+    Args:
+        writer: Tensorboard writer for writing text.
+        hyp_dict: Dictionary with hyperparameters.
+    """
+    for key, value in hyp_dict.items():
+        writer.add_text(key, str(value))
 
 
 def get_categorical_transforms() -> tuple[list, T.Compose]:
