@@ -1,9 +1,12 @@
 import datetime
 import numpy as np
+import json
 import os
 from PIL import Image
 import random
 import torch
+from torch import nn, optim
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as T
 
@@ -140,6 +143,32 @@ def setup_hyp_file(writer: SummaryWriter, hyp_dict: dict):
     """
     for key, value in hyp_dict.items():
         writer.add_text(key, str(value))
+
+
+def setup_hyp_dict(experiment_name: str) -> dict:
+    """This function retrieves the hyperparameters from the JSON file and
+    sets them up in a dictionary from which the hyperparameters can be used.
+
+    Args:
+        experiment_name: Name of the experiment that is run.
+    Returns:
+        Dictionary with hyperparameters.
+    """
+    experiment_location = os.path.join("Master-Thesis-Experiments",
+                                       (experiment_name + ".json"))
+    with open(experiment_location, "r") as f:
+        hyp_dict = json.load(f)
+
+    # The model already has to be defined, since the optimizer requires it
+    model = eval(hyp_dict["Model"])
+
+    # Evaluating the string expressions in the JSON experiment setup file
+    for key, value in hyp_dict.items():
+        try:
+            hyp_dict[key] = eval(value)
+        except NameError:
+            hyp_dict[key] = str(value) 
+    return hyp_dict
 
 
 def get_categorical_transforms() -> tuple[list, T.Compose]:

@@ -6,4 +6,5 @@ __pycache__/
 augmented_images/
 toy_problem.py
 toy_problems.py
-Master-Thesis-Experiments/
+Master-Thesis-Experiments/*/
+!Master-Thesis-Experiments/*.json 
