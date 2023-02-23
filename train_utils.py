@@ -1,4 +1,5 @@
 import datetime
+import matplotlib.pyplot as plt
 import numpy as np
 import json
 import os
@@ -7,11 +8,12 @@ import random
 import torch
 from torch import nn, optim
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
-from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as T
+from torch.utils.tensorboard import SummaryWriter
 
 from imagecorruptions import corrupt
 import warnings
+
 
 class CustomCorruption:
     """This is a class that allows for the corrupt function to be joined in a
@@ -33,6 +35,20 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
+def convert_to_list(labels: list):
+    """Function that converts a list of tensors to a list of lists.
+
+    Args:
+        labels: list of tensors.
+    Returns:
+        List of lists.
+    """
+    label_list = []
+    for tensor in labels:
+        label_list.append(tensor.tolist())
+    return flatten_list(label_list)
+
+
 def save_test_predicts(predicted_labels: list, paths: list):
     """Function that converts labels to a list and then saves paths and labels
     to appropriate prediction directories.
@@ -41,12 +57,7 @@ def save_test_predicts(predicted_labels: list, paths: list):
         predicted_labels: list of tensors with predicted labels.
         paths: list of lists with paths (strings) to images.
     """
-    # Flattening both path and label lists, 
-    # also converting predictions from tensors to lists
-    prediction_list = []
-    for tensor in predicted_labels:
-        prediction_list.append(tensor.tolist())
-    prediction_list = flatten_list(prediction_list)
+    prediction_list = convert_to_list(predicted_labels)
     paths = flatten_list(paths)
 
     # Dictionary for the labels to use in saving
@@ -71,6 +82,21 @@ def flatten_list(list: list) -> list:
         Flattened list.
     """
     return [item for sublist in list for item in sublist]
+
+
+def add_confusion_matrix(conf_mat: torch.Tensor, tensorboard_writer: SummaryWriter):
+    # Classes:
+    # 0: fail_label_crooked_print
+    # 1: fail_label_half_printed
+    # 2: fail_label_not_fully_printed
+    # 3: no_fail
+    classes = ["fail_label_crooked_print", "fail_label_half_printed",
+               "fail_label_not_fully_printed", "no_fail"]   
+
+    fig = plt.figure()
+    plt.imshow(conf_mat)
+
+    tensorboard_writer.add_figure("Confusion Matrix", fig)
 
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
@@ -161,9 +187,6 @@ def setup_hyp_dict(experiment_name: str) -> dict:
     with open(experiment_location, "r") as f:
         hyp_dict = json.load(f)
 
-    # The model already has to be defined, since the optimizer requires it
-    model = eval(hyp_dict["Model"])
-
     # Evaluating the string expressions in the JSON experiment setup file
     for key, value in hyp_dict.items():
         try:
@@ -224,10 +247,11 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
     # Combining categorical transforms into one list
     # and combining into a composed element of random choices
     combined_transforms = transforms_phase_1 + transforms_phase_2 + \
-                          transforms_phase_3
+                          transforms_phase_3 + transforms_phase_4
     categorical_transforms = T.Compose([T.RandomChoice(transforms_phase_1),
                                         T.RandomChoice(transforms_phase_2),
-                                        T.RandomChoice(transforms_phase_3)])
+                                        T.RandomChoice(transforms_phase_3),
+                                        T.RandomChoice(transforms_phase_4)])
 
     return combined_transforms, categorical_transforms
 
