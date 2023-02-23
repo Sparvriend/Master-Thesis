@@ -113,7 +113,7 @@ def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
     return images, path
 
 
-def setup_tensorboard(experiment_name: str) -> list[SummaryWriter]:
+def setup_tensorboard(experiment_name: str) -> tuple[list[SummaryWriter], str]:
     """Function that provides tensorboard writers for training and validation.
     
     Args:
@@ -123,14 +123,16 @@ def setup_tensorboard(experiment_name: str) -> list[SummaryWriter]:
     """
     
     current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
-    train_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/train'
-    val_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/val'
-    hyp_dir = "Master-Thesis-Experiments/" + experiment_name + current_time + '/hyp'
+    experiment_path = os.path.join("Master-Thesis-Experiments", (experiment_name
+                                                                 + current_time)) 
+    train_dir = os.path.join(experiment_path, "train")
+    val_dir = os.path.join(experiment_path, "val")
+    hyp_dir = os.path.join(experiment_path, "hyp")
     train_writer = SummaryWriter(train_dir)
     validation_writer = SummaryWriter(val_dir)
     hyp_writer = SummaryWriter(hyp_dir)
 
-    return {"train": train_writer, "val": validation_writer, "hyp": hyp_writer}
+    return {"train": train_writer, "val": validation_writer, "hyp": hyp_writer}, experiment_path
 
 
 def setup_hyp_file(writer: SummaryWriter, hyp_dict: dict):
@@ -248,7 +250,8 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
     transform_options = {"rand_augment": T.RandAugment(),
                          "categorical": categorical_transforms,
                          "random_choice": T.RandomChoice(combined_transforms),
-                         "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET)}
+                         "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET),
+                         "no_augment": T.Lambda(lambda x: x)}
 
     transform = T.Compose([
         transform_options[transform_type],

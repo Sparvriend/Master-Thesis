@@ -15,9 +15,10 @@ from train_utils import save_test_predicts, sep_collate, sep_test_collate, \
                         get_transforms, setup_tensorboard, setup_hyp_file, \
                         setup_hyp_dict 
 
-# TODO: Save experiment setups to a file type which can be loaded in for
-#       experiments and saving of experiments with tensorboard.
-#       -> Allow for giving the experiment name as an input to train.py
+# TODO: Find out why the accuracy is so low
+#       -> Try out many model iterations with low early stopping [Didnt work]
+#       -> Try out models without model replacement per epoch [Didnt work]
+#       -> Change model replacecment to be within 2/3 epochs instead of 1
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
@@ -92,6 +93,9 @@ def train_model(model: torchvision.models, device: torch.device,
                       data loaders.
         tensorboard_writers: Dictionary containing writer elements.
         epochs: Number of epochs to train the model for.
+
+    Returns:
+        The trained model.
     """
     # Setting the preliminary model to be the best model
     best_loss = 1000
@@ -161,16 +165,13 @@ def train_model(model: torchvision.models, device: torch.device,
                     early_stop += 1
                     if early_stop > early_stop_limit:
                         print("Early stopping ")
-                        return
+                        return model
             # Writing results to tensorboard
             writer = tensorboard_writers[phase]
             writer.add_scalar("Loss", loss.item(), i)
             writer.add_scalar("Accuracy", mean_accuracy, i)
     
-    # Closing tensorboard writers
-    for writer in tensorboard_writers:
-        writer.close()
-
+    return model
 
 def setup_data_loaders(augmentation_type: str, batch_size: int,
                        shuffle: bool, num_workers: int) -> dict:
@@ -232,20 +233,27 @@ def run_experiment(experiment_name: str):
                                       hyp_dict["Num Workers"])
 
     # Setting up tensorboard writers and writing hyperparameters
-    tensorboard_writers = setup_tensorboard(experiment_name)
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name)
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
     # Replacing the output classification layer with a 4 class version
     model = hyp_dict["Model"]
+    print(model)
     model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
 
     # Defining Accuracy metric and transferring the model to the device
     acc_metric = Accuracy(task="multiclass", num_classes = 4).to(device)
     model.to(device)
     
-    # Training the feature extractor
-    train_model(model, device, hyp_dict["Criterion"], hyp_dict["Optimizer"],
-                acc_metric, data_loaders, tensorboard_writers, hyp_dict["Epochs"])
+    # Training the feature extractor and saving the output model
+    model = train_model(model, device, hyp_dict["Criterion"], 
+                        hyp_dict["Optimizer"], acc_metric, data_loaders,
+                        tensorboard_writers, hyp_dict["Epochs"])
+    torch.save(model, os.path.join(experiment_path, "model.pth"))
+
+    # Closing tensorboard writers
+    for _, writer in tensorboard_writers.items():
+        writer.close()
 
     # Testing the feature extractor on testing data
     test_model(model, device, data_loaders["test"])
@@ -270,5 +278,5 @@ if __name__ == '__main__':
         run_experiment(sys.argv[1])
     else:
         print("No experiment name given, running all experiments")
-        run_all_experiments()
-    
+        for i in range(10):            
+            run_all_experiments()
