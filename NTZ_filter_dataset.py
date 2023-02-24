@@ -1,4 +1,3 @@
-import copy
 import os
 from PIL import Image
 import torch
@@ -40,19 +39,8 @@ class NTZFilterDataset(Dataset):
 
         # Augmenting the image if it is from the training dataset
         if self.data_type == "train":
+            # Transforming and saving label
             image = self.transform(raw_image)
-            image_copy = copy.deepcopy(image)
-
-            # Denormalizing the augmented image and saving it
-            denormalize = T.Normalize(mean = [-0.485/0.229, -0.456/0.224, -0.406/0.225],
-                                               std = [1/0.229, 1/0.224, 1/0.225])
-            image_copy = denormalize(image_copy)
-            to_PIL = T.ToPILImage()
-            PIL_image = to_PIL(image_copy)
-            img_name = os.path.normpath(path).split(os.sep)[-1]
-            PIL_image.save(os.path.join("augmented_images", img_name))
-
-            # Saving the label
             label = self.img_labels[idx]
         else:
             # Performing the normal transform without augmentation

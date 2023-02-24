@@ -5,8 +5,10 @@ import json
 import os
 from PIL import Image
 import random
+import time
 import torch
 from torch import nn, optim
+from torchmetrics import ConfusionMatrix
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 import torchvision.transforms as T
 from torch.utils.tensorboard import SummaryWriter
@@ -84,19 +86,87 @@ def flatten_list(list: list) -> list:
     return [item for sublist in list for item in sublist]
 
 
-def add_confusion_matrix(conf_mat: torch.Tensor, tensorboard_writer: SummaryWriter):
-    # Classes:
-    # 0: fail_label_crooked_print
-    # 1: fail_label_half_printed
-    # 2: fail_label_not_fully_printed
-    # 3: no_fail
-    classes = ["fail_label_crooked_print", "fail_label_half_printed",
-               "fail_label_not_fully_printed", "no_fail"]   
+def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
+                         tensorboard_writer: SummaryWriter):
+    """Function that adds a confusion matrix to the tensorboard.
+    Only saved for the last epoch to the hyperparameter writer.
+    The class labels are defined as:
+    0: fail_label_crooked_print
+    1: fail_label_half_printed
+    2: fail_label_not_fully_printed
+    3: no_fail
 
-    fig = plt.figure()
-    plt.imshow(conf_mat)
+    Args:
+        conf_mat: Confusion matrix as a torch tensor.
+        tensorboard_writer: hyperparameter writer.
+    """
+    # Creating confusion matrix from predictions and actual
+    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = 4)
+    combined_labels = convert_to_list(combined_labels)
+    combined_labels_pred = convert_to_list(combined_labels_pred)
+    conf_mat = conf_matrix(torch.tensor(combined_labels_pred),
+                           torch.tensor(combined_labels))
+    classes = ["Crooked print", "Half print", "Not full print", "No fail"]   
 
+    # Plot confusion matrix
+    fig, ax = plt.subplots()
+    im = ax.imshow(conf_mat, cmap='Blues')
+
+    # Setting x-axis and y-axis labels
+    ax.set_xticks(np.arange(len(classes)))
+    ax.set_yticks(np.arange(len(classes)))
+    ax.set_xticklabels(classes)
+    ax.set_yticklabels(classes)
+
+    # Add colorbar and title
+    cbar = ax.figure.colorbar(im, ax=ax)
+    ax.set_title("Confusion Matrix")
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+
+    # Adding text for each datapoint
+    for i in range(len(classes)):
+        for j in range(len(classes)):
+            text = ax.text(j, i, int(conf_mat[i, j]), ha = "center",
+                           va = "center", color = "w")
+
+    # Adding to tensorboard
     tensorboard_writer.add_figure("Confusion Matrix", fig)
+
+
+def report_metrics(flag: bool, start_time: float, epoch_length: int, 
+                   acc: float, f1_score: float, loss_over_epoch: float,
+                   total_imgs: int, writer: SummaryWriter, epoch: int):
+    """Function that allows for writing performance metrics to the terminal
+    and the tensorboard.
+
+    Args:
+        flag: Boolean for printing to the terminal or not.
+        start_time: Time of start of the epoch.
+        epoch_length: Number of batches in the epoch.
+        acc: Accumulated accuracy over the batches in the epoch.
+        f1_score: Accumulated f1_score over the batches in the epoch
+        loss_over_epoch: Accumulated loss over the epoch.
+        total_imgs: Total number of images in the epoch.
+        writer: Tensorboard writer, either for training or validation.
+        epoch: Current epoch to write metrics to.
+    """
+    # Calculating accuracy and score, since they are needed for writing.
+    mean_accuracy = (acc / epoch_length)
+    mean_f1_score = (f1_score / epoch_length)
+
+    if flag == True:
+        # Measuring elapsed time and reporting metrics over epoch
+        elapsed_time = time.time() - start_time
+        print("Loss = " + str(round(loss_over_epoch, 2)))
+        print("Accuracy = " + str(round(mean_accuracy, 2)))
+        print("F1 score = " + str(round(mean_f1_score, 2)))
+        print("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
+
+    # Writing results to tensorboard
+    writer.add_scalar("Loss", loss_over_epoch, epoch)
+    writer.add_scalar("Accuracy", mean_accuracy, epoch)
+    writer.add_scalar("F1 score", mean_f1_score, epoch)
 
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:

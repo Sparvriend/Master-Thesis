@@ -6,5 +6,7 @@
     "Batch Size": "32",
     "Shuffle": "True",
     "Num Workers": "4",
-    "Augmentation": "no_augment"
+    "Augmentation": "no_augment",
+    "PFM Flag": "False",
+    "Early Limit": "25"
 }

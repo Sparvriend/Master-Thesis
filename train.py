@@ -2,23 +2,20 @@ import copy
 import os
 from os import listdir
 import sys
-import torch
 import time
+import torch
 from torch import nn, optim
-from torchmetrics import Accuracy, ConfusionMatrix
+from torchmetrics import Accuracy, F1Score
 from torch.utils.data import DataLoader
 import torchvision
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
-from train_utils import sep_collate, get_transforms, convert_to_list, \
-                        setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
-                        add_confusion_matrix
+from train_utils import sep_collate, get_transforms, setup_tensorboard, \
+                        setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
+                        report_metrics
 
-# TODO: Add precision/recall/F1 score to performance metrics
-# TODO: Finish add_confusion_matrix in train_utils.py
-# TODO: Debloat train_model function
 # TODO: Text detection model for fourth label class?
 #       -> Just add it in and see what happens?
 # TODO: Create synthetic data -> for each class, move the filter across
@@ -29,9 +26,9 @@ from train_utils import sep_collate, get_transforms, convert_to_list, \
 
 
 def train_model(model: torchvision.models, device: torch.device,
-                criterion: nn.CrossEntropyLoss, optimizer: optim.SGD, 
-                acc_metric: Accuracy, conf_matrix: ConfusionMatrix, data_loaders: dict,
-                tensorboard_writers: dict, epochs: int):
+                criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
+                data_loaders: dict, tensorboard_writers: dict, epochs: int,
+                pfm_flag: bool, early_stop_limit: int):
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -42,22 +39,24 @@ def train_model(model: torchvision.models, device: torch.device,
         criterion: Cross Entropy Loss function
         optimizer: Stochastic Gradient Descent optimizer (descents in
                    opposite direction of steepest gradient).
-        acc_metric: Accuracy measurement between predicted and actual labels.
-        conf_matrix: Confusion matrix between predicted and actual labels.
         data_loaders: Dictionary containing the train, validation and test
                       data loaders.
         tensorboard_writers: Dictionary containing writer elements.
         epochs: Number of epochs to train the model for.
-
+        pfm_flag: Boolean deciding on whether to print performance metrics to terminal.
+        early_stop_limit: Number of epochs to wait before early stopping.
     Returns:
         The trained model.
-        The confusion matrix calculated for the last epoch.
+        The combined actual and predicted labels per epoch.
     """
     # Setting the preliminary model to be the best model
     best_loss = 1000
     best_model = copy.deepcopy(model)
     early_stop = 0
-    early_stop_limit = 25
+
+    # Setting up performance metrics
+    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
+    f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
 
     for i in range(epochs):
         print("On epoch " + str(i))
@@ -72,6 +71,7 @@ def train_model(model: torchvision.models, device: torch.device,
             # Set model metrics to 0 and starting model timer
             loss_over_epoch = 0
             acc = 0
+            f1_score = 0
             total_imgs = 0
             start_time = time.time()
 
@@ -91,9 +91,10 @@ def train_model(model: torchvision.models, device: torch.device,
                     model_output = model(inputs)
                     predicted_labels = model_output.argmax(dim=1)
                     
-                    # Computing the loss/accuracy
+                    # Computing performance metrics
                     loss = criterion(model_output, labels)
                     acc += acc_metric(predicted_labels, labels).item()
+                    f1_score += f1_metric(predicted_labels, labels).item()
                     
                     # Updating model weights if in training phase
                     if phase == "train":
@@ -109,18 +110,9 @@ def train_model(model: torchvision.models, device: torch.device,
                     combined_labels.append(labels)
                     combined_labels_pred.append(predicted_labels)
             
-            # Measuring elapsed time and reporting metrics over epoch
-            elapsed_time = time.time() - start_time
-            mean_accuracy = acc / len(data_loaders[phase])
-            print("Loss = " + str(round(loss_over_epoch, 2)))
-            print("Accuracy = " + str(round(mean_accuracy, 2)))
-            print("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
-            
-            # Creating confusion matrix, only saved on last epoch
-            combined_labels = convert_to_list(combined_labels)
-            combined_labels_pred = convert_to_list(combined_labels_pred)
-            conf_mat = conf_matrix(torch.tensor(combined_labels_pred),
-                                   torch.tensor(combined_labels))
+            writer = tensorboard_writers[phase]
+            report_metrics(pfm_flag, start_time, len(data_loaders[phase]), acc,
+                           f1_score, loss_over_epoch, total_imgs, writer, i)
             
             if phase == "val":
                 # Change best model to new model if validation loss is better
@@ -135,13 +127,9 @@ def train_model(model: torchvision.models, device: torch.device,
                     early_stop += 1
                     if early_stop > early_stop_limit:
                         print("Early stopping ")
-                        return model, conf_mat
-            # Writing results to tensorboard
-            writer = tensorboard_writers[phase]
-            writer.add_scalar("Loss", loss.item(), i)
-            writer.add_scalar("Accuracy", mean_accuracy, i)
-    
-    return model, conf_mat
+                        return model, combined_labels, combined_labels_pred
+
+    return model, combined_labels, combined_labels_pred
 
 def setup_data_loaders(augmentation_type: str, batch_size: int,
                        shuffle: bool, num_workers: int) -> dict:
@@ -201,22 +189,20 @@ def run_experiment(experiment_name: str):
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
     # Replacing the output classification layer with a 4 class version
+    # And transferring model to device
     model = hyp_dict["Model"]
     model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
-
-    # Defining Accuracy metric and transferring the model to the device
-    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
-    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = 4)
     model.to(device)
     
-    # Training the feature extractor and saving the output model
-    model, conf_mat = train_model(model, device, hyp_dict["Criterion"], 
-                                  hyp_dict["Optimizer"], acc_metric, conf_matrix,
-                                  data_loaders, tensorboard_writers, hyp_dict["Epochs"])
+    # Training and saving model
+    model, c_labels, c_labels_pred = train_model(model, device, hyp_dict["Criterion"],
+                                                hyp_dict["Optimizer"], data_loaders,
+                                                tensorboard_writers, hyp_dict["Epochs"],
+                                                hyp_dict["PFM Flag"], hyp_dict["Early Limit"])
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
-    # Adding the confusion matrix of the last epoch to the tensorboard
-    add_confusion_matrix(conf_mat, tensorboard_writers["hyp"])
+   # Adding the confusion matrix of the last epoch to the tensorboard
+    add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"])
 
     # Closing tensorboard writers
     for _, writer in tensorboard_writers.items():
