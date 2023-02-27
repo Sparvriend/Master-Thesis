@@ -7,6 +7,6 @@
     "Shuffle": "True",
     "Num Workers": "4",
     "Augmentation": "auto_augment",
-    "PFM Flag": "False",
+    "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
     "Early Limit": "25"
 }

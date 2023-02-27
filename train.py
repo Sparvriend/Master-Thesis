@@ -16,14 +16,23 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
                         report_metrics
 
-# TODO: Text detection model for fourth label class?
-#       -> Just add it in and see what happens?
+# TODO: Stepwise learning 80/10/10 (without early stopping)
+#       -> Fewer max epochs (50). 35/45
+# TODO: Figure out why the accuracy is so low sometimes
+#       (all augmentations enabled?)
+#       -> Turn on all augmentations and test for each
+#       -> Mean/std over 5 iterations of each augmentation.
+# TODO: Check results without pretrained weights
+# TODO: Read AutoAugment and RandAugment papers
+# TODO: Implement classifier setup (multiple different classifiers)
+#       -> Setup model loading from JSON file in such a way that it is
+#       compatible with different final classification layer names/in features.
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
 #       -> Uncertainty per layer in the model?
-# TODO: Implement classifier setup (multiple different classifiers)
-
+# TODO: Text detection model for fourth label class?
+#       -> Just add it in and see what happens?
 
 def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
@@ -146,12 +155,12 @@ def setup_data_loaders(augmentation_type: str, batch_size: int,
     train_path = "data/train"
     val_path = "data/val"
 
-    # Creating datasets for training, validation and testing data,
+    # Creating datasets for training and validation
     # based on NTZFilterDataset class.
     train_data = NTZFilterDataset(train_path, transform)
     val_data = NTZFilterDataset(val_path, transform)
 
-    # Creating data loaders for training, validation and testing data
+    # Creating data loaders for training and validation
     train_loader = DataLoader(train_data, batch_size = batch_size,
                               collate_fn = sep_collate, shuffle = shuffle,
                               num_workers = num_workers)
@@ -201,7 +210,7 @@ def run_experiment(experiment_name: str):
                                                 hyp_dict["PFM Flag"], hyp_dict["Early Limit"])
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
-   # Adding the confusion matrix of the last epoch to the tensorboard
+    # Adding the confusion matrix of the last epoch to the tensorboard
     add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"])
 
     # Closing tensorboard writers
@@ -228,6 +237,6 @@ if __name__ == '__main__':
         print("Running experiment: " + sys.argv[1])
         run_experiment(sys.argv[1])
     else:
-        print("No experiment name given, running all experiments 5 times")
-        for i in range(5):            
+        print("No experiment name given, running all experiments 3 times")
+        for i in range(3):            
             run_all_experiments()

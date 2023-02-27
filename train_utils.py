@@ -134,7 +134,7 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
     tensorboard_writer.add_figure("Confusion Matrix", fig)
 
 
-def report_metrics(flag: bool, start_time: float, epoch_length: int, 
+def report_metrics(flag: dict, start_time: float, epoch_length: int, 
                    acc: float, f1_score: float, loss_over_epoch: float,
                    total_imgs: int, writer: SummaryWriter, epoch: int):
     """Function that allows for writing performance metrics to the terminal
@@ -155,7 +155,7 @@ def report_metrics(flag: bool, start_time: float, epoch_length: int,
     mean_accuracy = (acc / epoch_length)
     mean_f1_score = (f1_score / epoch_length)
 
-    if flag == True:
+    if flag["Terminal"] == True:
         # Measuring elapsed time and reporting metrics over epoch
         elapsed_time = time.time() - start_time
         print("Loss = " + str(round(loss_over_epoch, 2)))
@@ -163,10 +163,11 @@ def report_metrics(flag: bool, start_time: float, epoch_length: int,
         print("F1 score = " + str(round(mean_f1_score, 2)))
         print("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
 
-    # Writing results to tensorboard
-    writer.add_scalar("Loss", loss_over_epoch, epoch)
-    writer.add_scalar("Accuracy", mean_accuracy, epoch)
-    writer.add_scalar("F1 score", mean_f1_score, epoch)
+    if flag["Tensorboard"] == True:
+        # Writing results to tensorboard
+        writer.add_scalar("Loss", loss_over_epoch, epoch)
+        writer.add_scalar("Accuracy", mean_accuracy, epoch)
+        writer.add_scalar("F1 score", mean_f1_score, epoch)
 
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
