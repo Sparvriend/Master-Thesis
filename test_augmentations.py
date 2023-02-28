@@ -29,7 +29,7 @@ def get_augment_loaders(augment: T.Compose, batch_size: int,
         Dictionary with train and validation loaders
     """
     transform = T.Compose([
-        T.RandomChoice([augment, T.Lambda(lambda x: x)]),
+        augment,
         T.Resize(256),
         T.CenterCrop(224),
         T.ToTensor(),
@@ -80,15 +80,15 @@ def setup_augmentation_testing():
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 3
+    num_runs = 5
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
 
     for augment in augmentation_types:
-        if str(augment) == "Lambda()":
-           pass
-        if str(augment).startswith("<train_utils.CustomCorruption"):
+        if isinstance(augment, T.Lambda):
+           continue
+        elif str(augment).startswith("<train_utils.CustomCorruption"):
             augment_type = augment.corruption_name
         else:
             # Defining experiment folder name and augment type

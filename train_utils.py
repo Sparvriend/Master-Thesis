@@ -8,6 +8,7 @@ import random
 import time
 import torch
 from torch import nn, optim
+from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 import torchvision.transforms as T

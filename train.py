@@ -5,6 +5,7 @@ import sys
 import time
 import torch
 from torch import nn, optim
+from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
 from torch.utils.data import DataLoader
 import torchvision
@@ -16,10 +17,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
                         report_metrics
 
-# TODO: Stepwise learning 80/10/10 (without early stopping)
-#       -> Fewer max epochs (50). 35/45
-# TODO: Run test_augmentations.py for augmentation effects
-# TODO: Run train.py MobileNetV2-not_pretrained to see results without pretraining
+# TODO: Figure out why running experiment with the scheduler has odd results
+#       -> Train accuracy stuck on 50% and validation not going higher than 80%
 # TODO: Read AutoAugment and RandAugment papers
 # TODO: Implement classifier setup (multiple different classifiers)
 #       -> Setup model loading from JSON file in such a way that it is
@@ -31,10 +30,12 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # TODO: Text detection model for fourth label class?
 #       -> Just add it in and see what happens?
 
+
 def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
-                data_loaders: dict, tensorboard_writers: dict, epochs: int,
-                pfm_flag: bool, early_stop_limit: int):
+                scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
+                tensorboard_writers: dict, epochs: int, pfm_flag: bool,
+                early_stop_limit: int):
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -45,6 +46,7 @@ def train_model(model: torchvision.models, device: torch.device,
         criterion: Cross Entropy Loss function
         optimizer: Stochastic Gradient Descent optimizer (descents in
                    opposite direction of steepest gradient).
+        scheduler: Scheduler that decreases the learning rate.
         data_loaders: Dictionary containing the train, validation and test
                       data loaders.
         tensorboard_writers: Dictionary containing writer elements.
@@ -106,6 +108,7 @@ def train_model(model: torchvision.models, device: torch.device,
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
+                        scheduler.step()
 
                     # Adding the loss over the epoch and counting
                     # total images a prediction was made over
@@ -128,10 +131,12 @@ def train_model(model: torchvision.models, device: torch.device,
                     early_stop = 0
 
                 # Change model back to old model if validation loss is worse
+                # The early stop limit can be set to 0 in a JSON file to
+                # disable early stopping.
                 else:
                     model.load_state_dict(best_model.state_dict())
                     early_stop += 1
-                    if early_stop > early_stop_limit:
+                    if early_stop > early_stop_limit and early_stop_limit != 0:
                         print("Early stopping ")
                         return model, combined_labels, combined_labels_pred
 
@@ -202,9 +207,10 @@ def run_experiment(experiment_name: str):
     
     # Training and saving model
     model, c_labels, c_labels_pred = train_model(model, device, hyp_dict["Criterion"],
-                                                hyp_dict["Optimizer"], data_loaders,
-                                                tensorboard_writers, hyp_dict["Epochs"],
-                                                hyp_dict["PFM Flag"], hyp_dict["Early Limit"])
+                                                hyp_dict["Optimizer"], hyp_dict["Scheduler"],
+                                                data_loaders, tensorboard_writers,
+                                                hyp_dict["Epochs"], hyp_dict["PFM Flag"],
+                                                hyp_dict["Early Limit"])
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
     # Adding the confusion matrix of the last epoch to the tensorboard
@@ -219,19 +225,17 @@ def run_all_experiments():
     """Function that runs all experiments (JSON files) in 
     the Master-Thesis-Experiments folder.
     """
-    path = "Master-Thesis-Experiments"
-    files = [f for f in listdir(path) 
-             if os.path.isfile(os.path.join(path, f))]
-    for file in files:
-        if file.endswith(".json"):
-            experiment_name = os.path.splitext(file)[0]
-            print("Running experiment: " + experiment_name)
-            run_experiment(experiment_name)
+    experiment_list = ["no_augment", "rand_augment", "categorical",
+                       "auto_augment", "not_pretrained", "scheduler"]
+    for file in experiment_list:
+        experiment_name = "MobileNetV2-" + file
+        print("Running experiment: " + experiment_name)
+        run_experiment(experiment_name)
 
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1])):
+        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1] + ".json")):
             print("Running experiment: " + sys.argv[1])
             run_experiment(sys.argv[1])
         else:
