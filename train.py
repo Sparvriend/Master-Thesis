@@ -18,11 +18,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 
 # TODO: Stepwise learning 80/10/10 (without early stopping)
 #       -> Fewer max epochs (50). 35/45
-# TODO: Figure out why the accuracy is so low sometimes
-#       (all augmentations enabled?)
-#       -> Turn on all augmentations and test for each
-#       -> Mean/std over 5 iterations of each augmentation.
-# TODO: Check results without pretrained weights
+# TODO: Run test_augmentations.py for augmentation effects
+# TODO: Run train.py MobileNetV2-not_pretrained to see results without pretraining
 # TODO: Read AutoAugment and RandAugment papers
 # TODO: Implement classifier setup (multiple different classifiers)
 #       -> Setup model loading from JSON file in such a way that it is
@@ -132,7 +129,7 @@ def train_model(model: torchvision.models, device: torch.device,
 
                 # Change model back to old model if validation loss is worse
                 else:
-                    model = copy.deepcopy(best_model)
+                    model.load_state_dict(best_model.state_dict())
                     early_stop += 1
                     if early_stop > early_stop_limit:
                         print("Early stopping ")
@@ -234,8 +231,11 @@ def run_all_experiments():
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        print("Running experiment: " + sys.argv[1])
-        run_experiment(sys.argv[1])
+        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1])):
+            print("Running experiment: " + sys.argv[1])
+            run_experiment(sys.argv[1])
+        else:
+            print("Experiment not found, exiting ...")
     else:
         print("No experiment name given, running all experiments 3 times")
         for i in range(3):            

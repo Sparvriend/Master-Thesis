@@ -29,7 +29,7 @@ def get_augment_loaders(augment: T.Compose, batch_size: int,
         Dictionary with train and validation loaders
     """
     transform = T.Compose([
-        augment,
+        T.RandomChoice([augment, T.Lambda(lambda x: x)]),
         T.Resize(256),
         T.CenterCrop(224),
         T.ToTensor(),
@@ -75,18 +75,24 @@ def setup_augmentation_testing():
     # Transferring model to device and making a baseline copy.
     model = hyp_dict["Model"]
     model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
+    model.to(device)
     def_model = copy.deepcopy(model)
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 5
+    num_runs = 3
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
 
     for augment in augmentation_types:
-        # Defining experiment folder name and augment type
-        augment_type = str(augment).split("(")[0]
+        if str(augment) == "Lambda()":
+           pass
+        if str(augment).startswith("<train_utils.CustomCorruption"):
+            augment_type = augment.corruption_name
+        else:
+            # Defining experiment folder name and augment type
+            augment_type = str(augment).split("(")[0]
         experiment_folder_name = "MobileNetV2-test_augment-" + augment_type
 
         # Retrieving data loaders for the current augmentation
@@ -100,8 +106,7 @@ def setup_augmentation_testing():
 
         for i in range(num_runs):
             # Resetting the model on each run
-            model = copy.deepcopy(def_model)
-            model.to(device)
+            model.load_state_dict(def_model.state_dict())
 
             # Setting up tensorboard writers
             tensorboard_writers, _ = setup_tensorboard(os.path.join(experiment_folder_name,

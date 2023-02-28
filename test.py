@@ -114,8 +114,11 @@ def setup_testing(experiment_folder: str):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        print("Testing on model from experiment: " + sys.argv[1])
-        setup_testing(sys.argv[1])
+        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1])):
+            print("Testing on model from experiment: " + sys.argv[1])
+            setup_testing(sys.argv[1])
+        else:
+            print("Experiment not found, exiting ...")
     else:
         print("No folder name given, exiting...")
         exit()
