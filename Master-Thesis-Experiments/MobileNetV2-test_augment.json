@@ -8,5 +8,6 @@
     "Shuffle": "True",
     "Num Workers": "4",
     "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
-    "Early Limit": "10"
+    "Early Limit": "10",
+    "Replacement Limit": "1"
 }

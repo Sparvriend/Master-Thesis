@@ -121,7 +121,8 @@ def setup_augmentation_testing():
                                                          tensorboard_writers,
                                                          hyp_dict["Epochs"],
                                                          hyp_dict["PFM Flag"],
-                                                         hyp_dict["Early Limit"])
+                                                         hyp_dict["Early Limit"],
+                                                         hyp_dict["Replacement Limit"])
             acc_list.append(acc_metric(c_labels_pred[0], c_labels[0]).item())
 
             # Closing writers for the iteration

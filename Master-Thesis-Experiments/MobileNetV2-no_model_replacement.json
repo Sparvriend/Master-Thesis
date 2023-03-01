@@ -7,8 +7,8 @@
     "Batch Size": "32",
     "Shuffle": "True",
     "Num Workers": "4",
-    "Augmentation": "auto_augment",
+    "Augmentation": "categorical",
     "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
     "Early Limit": "10",
-    "Replacement Limit": "1"
+    "Replacement Limit": "0"
 }
