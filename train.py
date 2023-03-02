@@ -17,7 +17,26 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
                         report_metrics
 
-# TODO: Read AutoAugment and RandAugment papers
+# To open tensorboard in browser:
+# Run the following command in a new terminal:
+# tensorboard --logdir=Master-Thesis-Experiments
+# TODO: Start thinking about reporting results 
+#       -> excel sheet reporting (download data from tensorboard and report final accuracy)
+#       -> Report results per experiment, explaining conclusion from each experiment.
+#       -> Current exp:
+#                       1. Baseline (No augmentation/no pretraining)
+#                       2. Pretrained + no augmentation
+#                       3. Pretrained + augmentation
+#                       4. Pretrained + augmentation without lambda functions
+#                       5. Pretrained + different iterations of model replacement (1-5)
+#                          + augmentation types
+#                       6. Not pretrained + augmentation
+#                       7. Pretrained + augmentations seperately (test_augmentations.py)
+#                       8. Pretrained + all augmentations on top of each other (PRIORITY)
+#                       9. Case Study: Applying setup to tinyImageNet classification.
+# TODO: Report GPU memory/Energy
+# TODO: In test_augmentations.py, add all results to the same .txt file instead of seperate files
+#       -> Implemented, check if it works fine by running test_augmentations.py
 # TODO: Implement classifier setup (multiple different classifiers)
 #       -> Setup model loading from JSON file in such a way that it is
 #       compatible with different final classification layer names/in features.
@@ -26,7 +45,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # TODO: Uncertainty prediction per image
 #       -> Uncertainty per layer in the model?
 # TODO: Text detection model for fourth label class?
-#       -> Just add it in and see what happens?
+#       -> Need more information from client about when text is wrong.
+#       -> Just add it in and see what happens?    
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -164,8 +184,8 @@ def setup_data_loaders(augmentation_type: str, batch_size: int,
     transform = get_transforms(augmentation_type)
 
     # File paths
-    train_path = "data/train"
-    val_path = "data/val"
+    train_path = os.path.join("data", "train")
+    val_path = os.path.join("data", "val")
 
     # Creating datasets for training and validation
     # based on NTZFilterDataset class.

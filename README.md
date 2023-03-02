@@ -14,8 +14,8 @@ The JSON configuration files are used to run experiments with different hyperpar
     Num workers: The amount of workers used for loading the data.
     Augmentation: The type of augmentation to use for online augmentation of the images. Choice of rand_augment, categorical, random_choice, auto_augment and no_augment.
     PFM Flag: Performance metric recording flags, consists of a dictionary with two keys, Terminal, for printing results to the terminal and Tensorboard for recording results with tensorboard.
-    Early Limit: The maximum amount of epochs the model can be trained for without an improvement in the validation accuracy, before stopping early.
-    Replacement Limit: The maximum amount of epochs a model can be trained for without an improvement in the validation accuracy, before the model is replaced with the previous best model.
+    Early Limit: The maximum amount of epochs the model can be trained for without an improvement in the validation accuracy, before stopping early. If set to 0, early stopping is disabled
+    Replacement Limit: The maximum amount of epochs a model can be trained for without an improvement in the validation accuracy, before the model is replaced with the previous best model. If set to 0, model replacement is disabled.
 
 ## Code explanation
 

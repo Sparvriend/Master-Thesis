@@ -37,8 +37,8 @@ def get_augment_loaders(augment: T.Compose, batch_size: int,
     ])
 
     # File paths
-    train_path = "data/train"
-    val_path = "data/val"
+    train_path = os.path.join("data", "train")
+    val_path = os.path.join("data", "val")
 
     # Creating datasets for training, validation and testing data,
     # based on NTZFilterDataset class.
@@ -116,7 +116,8 @@ def setup_augmentation_testing():
             # Training model with the current augmentation
             model, c_labels, c_labels_pred = train_model(model, device, 
                                                          hyp_dict["Criterion"], 
-                                                         hyp_dict["Optimizer"], 
+                                                         hyp_dict["Optimizer"],
+                                                         hyp_dict["Scheduler"], 
                                                          data_loaders,
                                                          tensorboard_writers,
                                                          hyp_dict["Epochs"],
@@ -130,13 +131,13 @@ def setup_augmentation_testing():
                 writer.close()
         
         # Opening txt file and writing average accuracy result to it
-        f = open(os.path.join("Master-Thesis-Experiments",
-                              experiment_folder_name, "result.txt"), "a")
+        f = open(os.path.join("Master-Thesis-Experiments", "results.txt"), "a")
         f.write("Mean accuracy of last epoch over " + str(num_runs) + " runs for "
                 + str(augment_type) + ": " + str(round(np.mean(acc_list), 2)))
         f.write("\nStandard deviation of last epoch over " + str(num_runs) +
                 " runs for " + str(augment_type) + ": " +
                 str(round(np.std(acc_list), 2)))
+        f.write("=============================================================")
         f.close()
 
 

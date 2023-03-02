@@ -10,5 +10,5 @@
     "Augmentation": "no_augment",
     "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
     "Early Limit": "10",
-    "Replacement Limit": "1"
+    "Replacement Limit": "0"
 }

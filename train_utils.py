@@ -52,29 +52,6 @@ def convert_to_list(labels: list):
     return flatten_list(label_list)
 
 
-def save_test_predicts(predicted_labels: list, paths: list):
-    """Function that converts labels to a list and then saves paths and labels
-    to appropriate prediction directories.
-
-    Args:
-        predicted_labels: list of tensors with predicted labels.
-        paths: list of lists with paths (strings) to images.
-    """
-    prediction_list = convert_to_list(predicted_labels)
-    paths = flatten_list(paths)
-
-    # Dictionary for the labels to use in saving
-    label_dict = {0: "fail_label_crooked_print", 1: "fail_label_half_printed",
-                  2: "fail_label_not_fully_printed", 3: "no_fail"}	
-    prediction_dir = "data/test_predictions"
-
-    # Saving each image to the predicted folder
-    for idx, path in enumerate(paths):
-        name = os.path.normpath(path).split(os.sep)[-1]
-        img = Image.open(path)
-        img.save(os.path.join(prediction_dir, label_dict[prediction_list[idx]], name))
-
-
 def flatten_list(list: list) -> list:
     """Function that takes a list of lists and flattens it into
     a single list.
@@ -166,9 +143,14 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
 
     if flag["Tensorboard"] == True:
         # Writing results to tensorboard
-        writer.add_scalar("Loss", loss_over_epoch, epoch)
-        writer.add_scalar("Accuracy", mean_accuracy, epoch)
-        writer.add_scalar("F1 score", mean_f1_score, epoch)
+        # Different graphs for training and validation metrics
+        if writer.log_dir.endswith("train"):
+            phase = "Train "
+        else:
+            phase = "Validation "
+        writer.add_scalar(phase + "Loss", loss_over_epoch, epoch)
+        writer.add_scalar(phase + "Accuracy", mean_accuracy, epoch)
+        writer.add_scalar(phase + "F1 score", mean_f1_score, epoch)
 
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
@@ -193,22 +175,6 @@ def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     labels = torch.stack(list(tensor_labels), dim = 0)
 
     return images, labels
-
-
-def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
-    """ Manual collate function for testing dataloader.
-    It converts the images to a torch stack and returns the paths.
-
-    Args:
-        batch: batch of data items from a dataloader.
-    Returns:
-        images as torch stack and paths.
-    """
-    path, images, _ = zip(*batch)
-
-    images = torch.stack(list(images), dim = 0)
-
-    return images, path
 
 
 def setup_tensorboard(experiment_name: str) -> tuple[list[SummaryWriter], str]:

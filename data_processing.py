@@ -5,10 +5,9 @@ import random
 import shutil
 
 # Forming file paths for destinations of training, testing and validation data
-TRAIN_DESTINATION = "data/train"
-VAL_DESTINATION = "data/val"
-TEST_DESTINATION = "data/test"
-TEST_PREDICTIONS_DESTINATION = "data/test_predictions"
+TRAIN_DESTINATION = os.path.join("data", "train")
+VAL_DESTINATION = os.path.join("data", "val")
+TEST_DESTINATION = os.path.join("data", "test")
 
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION = "NTZ_filter_label_data"
@@ -89,7 +88,7 @@ def create_dirs():
     It also creates an augmentation directory.
     """
     for destination_type in [TRAIN_DESTINATION, VAL_DESTINATION, 
-                             TEST_DESTINATION, TEST_PREDICTIONS_DESTINATION]:
+                             TEST_DESTINATION]:
         for data_class in DATA_CLASSES:
             path = os.path.join(destination_type, data_class)
             if not os.path.exists(path):
