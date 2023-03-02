@@ -67,6 +67,11 @@ def setup_augmentation_testing():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
+    # Checking if results.txt already exists, if so remove it,
+    # since it contains info from a previous run
+    if os.path.exists(os.path.join("Master-Thesis-Experiments", "results.txt")):
+        os.unlink(os.path.join("Master-Thesis-Experiments", "results.txt"))
+
     # Defining experiment name and retrieving hyperparameter dictionary
     experiment_name = "MobileNetV2-test_augment"
     hyp_dict = setup_hyp_dict(experiment_name)
@@ -80,7 +85,7 @@ def setup_augmentation_testing():
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 5
+    num_runs = 2
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
@@ -137,7 +142,7 @@ def setup_augmentation_testing():
         f.write("\nStandard deviation of last epoch over " + str(num_runs) +
                 " runs for " + str(augment_type) + ": " +
                 str(round(np.std(acc_list), 2)))
-        f.write("=============================================================")
+        f.write("\n=============================================================\n")
         f.close()
 
 

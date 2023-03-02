@@ -35,8 +35,6 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 #                       8. Pretrained + all augmentations on top of each other (PRIORITY)
 #                       9. Case Study: Applying setup to tinyImageNet classification.
 # TODO: Report GPU memory/Energy
-# TODO: In test_augmentations.py, add all results to the same .txt file instead of seperate files
-#       -> Implemented, check if it works fine by running test_augmentations.py
 # TODO: Implement classifier setup (multiple different classifiers)
 #       -> Setup model loading from JSON file in such a way that it is
 #       compatible with different final classification layer names/in features.
