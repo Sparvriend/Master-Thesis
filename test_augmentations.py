@@ -8,8 +8,8 @@ from torch.utils.data import DataLoader
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 import torchvision.transforms as T
 from train import sep_collate, train_model
-from train_utils import get_categorical_transforms, setup_hyp_dict, \
-                        setup_tensorboard, setup_hyp_file
+from train_utils import get_categorical_transforms, set_classification_layer, \
+                        setup_tensorboard, setup_hyp_file, setup_hyp_dict
 
 from NTZ_filter_dataset import NTZFilterDataset
 
@@ -79,13 +79,13 @@ def setup_augmentation_testing():
     # Replacing the output classification layer with a 4 class version.
     # Transferring model to device and making a baseline copy.
     model = hyp_dict["Model"]
-    model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
+    set_classification_layer(model)
     model.to(device)
     def_model = copy.deepcopy(model)
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 2
+    num_runs = 5
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)

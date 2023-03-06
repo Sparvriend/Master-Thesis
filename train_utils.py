@@ -10,7 +10,8 @@ import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
+                               shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
 import torchvision.transforms as T
 from torch.utils.tensorboard import SummaryWriter
 
@@ -114,7 +115,8 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
 
 def report_metrics(flag: dict, start_time: float, epoch_length: int, 
                    acc: float, f1_score: float, loss_over_epoch: float,
-                   total_imgs: int, writer: SummaryWriter, epoch: int):
+                   total_imgs: int, writer: SummaryWriter, epoch: int,
+                   experiment_path: str):
     """Function that allows for writing performance metrics to the terminal
     and the tensorboard.
 
@@ -128,14 +130,22 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
         total_imgs: Total number of images in the epoch.
         writer: Tensorboard writer, either for training or validation.
         epoch: Current epoch to write metrics to.
+        experiment_path: Path to the experiment folder.
     """
+    # Measuring elapsed time and reporting metrics over epoch
+    elapsed_time = time.time() - start_time
+
+    # Different graphs for training and validation metrics
+    if writer.log_dir.endswith("train"):
+        phase = "Train "
+    else:
+        phase = "Validation "
+
     # Calculating accuracy and score, since they are needed for writing.
     mean_accuracy = (acc / epoch_length)
     mean_f1_score = (f1_score / epoch_length)
 
     if flag["Terminal"] == True:
-        # Measuring elapsed time and reporting metrics over epoch
-        elapsed_time = time.time() - start_time
         print("Loss = " + str(round(loss_over_epoch, 2)))
         print("Accuracy = " + str(round(mean_accuracy, 2)))
         print("F1 score = " + str(round(mean_f1_score, 2)))
@@ -143,14 +153,35 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
 
     if flag["Tensorboard"] == True:
         # Writing results to tensorboard
-        # Different graphs for training and validation metrics
-        if writer.log_dir.endswith("train"):
-            phase = "Train "
-        else:
-            phase = "Validation "
         writer.add_scalar(phase + "Loss", loss_over_epoch, epoch)
         writer.add_scalar(phase + "Accuracy", mean_accuracy, epoch)
         writer.add_scalar(phase + "F1 score", mean_f1_score, epoch)
+    
+    # Writing the results to a txt file as well, for results recording
+    with open(experiment_path + "/results.txt", "a") as file:
+        file.write("Phase: " + phase + "\n")
+        file.write("Epoch: " + str(epoch) + "\n")
+        file.write("Loss = " + str(round(loss_over_epoch, 2)) + "\n")
+        file.write("Accuracy = " + str(round(mean_accuracy, 2)) + "\n")
+        file.write("F1 score = " + str(round(mean_f1_score, 2)) + "\n")
+        file.write("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
+        file.write("\n")
+    file.close()
+
+
+def set_classification_layer(model):
+    """This function changes the final classification layer
+    from a PyTorch deep learning model to a four output classes version.
+    The function edits the model variable, so no need to return it.
+
+    Args: 
+        model: This is a default model, with many more classes than 4.
+    """
+    classes = 4
+    if model.__class__.__name__ == "MobileNetV2":
+        model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
+    elif model.__class__.__name__ == "ShuffleNetV2":
+        model.fc = nn.Linear(in_features = 1024, out_features = classes)
 
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
@@ -313,7 +344,8 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
                          "categorical": categorical_transforms,
                          "random_choice": T.RandomChoice(combined_transforms),
                          "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET),
-                         "no_augment": T.Lambda(lambda x: x)}
+                         "no_augment": T.Lambda(lambda x: x),
+                         "random_apply": T.RandomOrder(combined_transforms)}
 
     transform = T.Compose([
         transform_options[transform_type],

@@ -1,6 +1,5 @@
 import copy
 import os
-from os import listdir
 import sys
 import time
 import torch
@@ -9,35 +8,29 @@ from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
 from torch.utils.data import DataLoader
 import torchvision
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
+                               shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
 from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
-                        report_metrics
+                        report_metrics, set_classification_layer
 
 # To open tensorboard in browser:
 # Run the following command in a new terminal:
 # tensorboard --logdir=Master-Thesis-Experiments
-# TODO: Start thinking about reporting results 
-#       -> excel sheet reporting (download data from tensorboard and report final accuracy)
-#       -> Report results per experiment, explaining conclusion from each experiment.
-#       -> Current exp:
-#                       1. Baseline (No augmentation/no pretraining)
-#                       2. Pretrained + no augmentation
-#                       3. Pretrained + augmentation
-#                       4. Pretrained + augmentation without lambda functions
-#                       5. Pretrained + different iterations of model replacement (1-5)
-#                          + augmentation types
-#                       6. Not pretrained + augmentation
-#                       7. Pretrained + augmentations seperately (test_augmentations.py)
-#                       8. Pretrained + all augmentations on top of each other (PRIORITY)
-#                       9. Case Study: Applying setup to tinyImageNet classification.
+# TODO: Report results
+#       -> Tensorboard for graphs
+#       -> results.txt files for final accuracies
+#       -> Experiment list:
+#           1. Baseline (MobileNetV2 + Pretrained weights)
+#           2. RandomApply (MobileNetV2 + pretrained weights + RandomApply)
+#           3. RandAugment (MobileNetV2 + pretrained weights + RandAugment)
+#           4. DifferentModel (ShuffleNetV2 + pretrained weights + Categorical)
+#           5. NotPretrained (MobileNetV2 + Categorical)
+#           6. CategoricalPhases (MobileNetV2 + pretrained weights + phase 1-4 seperately/combined)
 # TODO: Report GPU memory/Energy
-# TODO: Implement classifier setup (multiple different classifiers)
-#       -> Setup model loading from JSON file in such a way that it is
-#       compatible with different final classification layer names/in features.
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Uncertainty prediction per image
@@ -51,7 +44,8 @@ def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
                 scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
                 tensorboard_writers: dict, epochs: int, pfm_flag: bool,
-                early_stop_limit: int, model_replacement_limit: int):
+                early_stop_limit: int, model_replacement_limit: int,
+                experiment_path: str):
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -72,6 +66,7 @@ def train_model(model: torchvision.models, device: torch.device,
         early_stop_limit: Number of epochs to wait before early stopping.
         model_replacement_limit: Number of epochs to wait before
                                  replacing model.
+        experiment_path: Path to the experiment folder.
     Returns:
         The trained model.
         The combined actual and predicted labels per epoch.
@@ -140,7 +135,8 @@ def train_model(model: torchvision.models, device: torch.device,
             
             writer = tensorboard_writers[phase]
             report_metrics(pfm_flag, start_time, len(data_loaders[phase]), acc,
-                           f1_score, loss_over_epoch, total_imgs, writer, i)
+                           f1_score, loss_over_epoch, total_imgs, writer, i,
+                           experiment_path)
             
             if phase == "val":
                 # Change best model to new model if validation loss is better
@@ -230,7 +226,7 @@ def run_experiment(experiment_name: str):
     # Replacing the output classification layer with a 4 class version
     # And transferring model to device
     model = hyp_dict["Model"]
-    model.classifier[1] = nn.Linear(in_features = 1280, out_features = 4)
+    set_classification_layer(model)
     model.to(device)
     
     # Training and saving model
@@ -243,7 +239,8 @@ def run_experiment(experiment_name: str):
                                                  hyp_dict["Epochs"], 
                                                  hyp_dict["PFM Flag"],
                                                  hyp_dict["Early Limit"],
-                                                 hyp_dict["Replacement Limit"])
+                                                 hyp_dict["Replacement Limit"],
+                                                 experiment_path)
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
     # Adding the confusion matrix of the last epoch to the tensorboard
@@ -258,13 +255,12 @@ def run_all_experiments():
     """Function that runs all experiments (JSON files) in 
     the Master-Thesis-Experiments folder.
     """
-    experiment_list = ["no_augment", "rand_augment", "categorical",
-                       "auto_augment", "not_pretrained", "scheduler",
-                       "3_model_replacement", "no_model_replacement"]
+    experiment_list = ["Experiment1-Baseline", "Experiment2-RandomApply",
+                       "Experiment3-RandAugment", "Experiment4-DifferentModel",
+                       "Experiment5-NotPretrained"]
     for file in experiment_list:
-        experiment_name = "MobileNetV2-" + file
-        print("Running experiment: " + experiment_name)
-        run_experiment(experiment_name)
+        print("Running experiment: " + file)
+        run_experiment(file)
 
 
 if __name__ == '__main__':
@@ -280,6 +276,6 @@ if __name__ == '__main__':
         else:
             print("Experiment not found, exiting ...")
     else:
-        print("No experiment name given, running all experiments 3 times")
-        for i in range(3):            
+        print("No experiment name given, running all experiments 5 times")
+        for i in range(5):            
             run_all_experiments()
