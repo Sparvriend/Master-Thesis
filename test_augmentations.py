@@ -85,7 +85,7 @@ def setup_augmentation_testing():
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 5
+    num_runs = 4
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
@@ -114,7 +114,7 @@ def setup_augmentation_testing():
             model.load_state_dict(def_model.state_dict())
 
             # Setting up tensorboard writers
-            tensorboard_writers, _ = setup_tensorboard(os.path.join(experiment_folder_name,
+            tensorboard_writers, experiment_path = setup_tensorboard(os.path.join(experiment_folder_name,
                                                                     ("Run" + str(i) + "-")))
             setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
             
@@ -128,7 +128,8 @@ def setup_augmentation_testing():
                                                          hyp_dict["Epochs"],
                                                          hyp_dict["PFM Flag"],
                                                          hyp_dict["Early Limit"],
-                                                         hyp_dict["Replacement Limit"])
+                                                         hyp_dict["Replacement Limit"],
+                                                         experiment_path)
             acc_list.append(acc_metric(c_labels_pred[0], c_labels[0]).item())
 
             # Closing writers for the iteration

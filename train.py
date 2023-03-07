@@ -29,15 +29,21 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 #           3. RandAugment (MobileNetV2 + pretrained weights + RandAugment)
 #           4. DifferentModel (ShuffleNetV2 + pretrained weights + Categorical)
 #           5. NotPretrained (MobileNetV2 + Categorical)
-#           6. CategoricalPhases (MobileNetV2 + pretrained weights + phase 1-4 seperately/combined)
-# TODO: Report GPU memory/Energy
+# TODO: Figure out why test_augmentations.py gives terrible results
+#       -> Used to be good, >95% for all types.
+# TODO: Look into overfit/underfit per experiment
+#       -> Strong difference between validation/train accuracy indicated over/under fit.
+#       -> Fix experiments 4 and 5. Experiment 2 might not be fixable
+# TODO: Report GPU memory usage
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
-# TODO: Uncertainty prediction per image
-#       -> Uncertainty per layer in the model?
+# TODO: Start on explainability of the model
+#       -> Guided backpropagation, gradient on neurons with respect to input image
+#       -> Integrated gradients 
+#       -> Uncertainty prediction (DUQ)
 # TODO: Text detection model for fourth label class?
 #       -> Need more information from client about when text is wrong.
-#       -> Just add it in and see what happens?    
+#       -> Just add it in and see what happens?
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -45,7 +51,7 @@ def train_model(model: torchvision.models, device: torch.device,
                 scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
                 tensorboard_writers: dict, epochs: int, pfm_flag: bool,
                 early_stop_limit: int, model_replacement_limit: int,
-                experiment_path: str):
+                experiment_path: str) -> tuple[nn.Module, list, list]:
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.

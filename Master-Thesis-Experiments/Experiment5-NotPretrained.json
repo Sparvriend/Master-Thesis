@@ -9,6 +9,6 @@
     "Num Workers": "4",
     "Augmentation": "categorical",
     "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
-    "Early Limit": "15",
+    "Early Limit": "30",
     "Replacement Limit": "2"
 }

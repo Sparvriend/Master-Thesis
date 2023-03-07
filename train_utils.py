@@ -10,11 +10,13 @@ import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix
+import torchvision
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
                                shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
 import torchvision.transforms as T
 from torch.utils.tensorboard import SummaryWriter
 
+from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
 
@@ -39,7 +41,7 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
-def convert_to_list(labels: list):
+def convert_to_list(labels: list) -> list:
     """Function that converts a list of tensors to a list of lists.
 
     Args:
@@ -169,7 +171,7 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     file.close()
 
 
-def set_classification_layer(model):
+def set_classification_layer(model: torchvision.models):
     """This function changes the final classification layer
     from a PyTorch deep learning model to a four output classes version.
     The function edits the model variable, so no need to return it.
@@ -263,6 +265,23 @@ def setup_hyp_dict(experiment_name: str) -> dict:
         except NameError:
             hyp_dict[key] = str(value) 
     return hyp_dict
+
+
+def calculate_flops(model: torchvision.models, batch_size: int, warm_up: int = 10):
+    """ This function uses the DeepSpeed Python library to calculate the FLOPS,
+    MACS and the parameters of a model. Keep in mind that the amount of FLOPS
+    linearly increases with the batch size.
+
+    Args:
+        model: PyTorch model.
+        batch_size: Batch size of the model.
+        warm_up: Number of warm up iterations before calculations are made.
+    """
+    flops, macs, params = get_model_profile(model = model,
+                                    input_shape = (batch_size, 3, 224, 224),
+                                    print_profile = False, detailed = False,
+                                    warm_up = warm_up)
+    print(f"FLOPS = {flops}\nMACS = {macs}\nparams = {params}")
 
 
 def get_categorical_transforms() -> tuple[list, T.Compose]:
