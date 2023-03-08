@@ -73,19 +73,26 @@ def setup_augmentation_testing():
         os.unlink(os.path.join("Master-Thesis-Experiments", "results.txt"))
 
     # Defining experiment name and retrieving hyperparameter dictionary
-    experiment_name = "MobileNetV2-test_augment"
+    experiment_name = "TestAugments"
     hyp_dict = setup_hyp_dict(experiment_name)
 
-    # Replacing the output classification layer with a 4 class version.
-    # Transferring model to device and making a baseline copy.
+    # Creating model, optimizer and scheduler objects
     model = hyp_dict["Model"]
+    optimizer = hyp_dict["Optimizer"]
+    scheduler = hyp_dict["Scheduler"]
+
+    # Replacing the output classification layer with a 4 class version
     set_classification_layer(model)
     model.to(device)
+
+    # Saving default model, optimizer and scheduler
     def_model = copy.deepcopy(model)
+    def_optim = copy.deepcopy(optimizer)
+    def_sched = copy.deepcopy(scheduler)
 
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
-    num_runs = 4
+    num_runs = 5
 
     # Defining accuracy metric for multi classification
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
@@ -98,7 +105,7 @@ def setup_augmentation_testing():
         else:
             # Defining experiment folder name and augment type
             augment_type = str(augment).split("(")[0]
-        experiment_folder_name = "MobileNetV2-test_augment-" + augment_type
+        experiment_folder_name = experiment_name + "-" + augment_type
 
         # Retrieving data loaders for the current augmentation
         data_loaders = get_augment_loaders(augment, 
@@ -110,8 +117,10 @@ def setup_augmentation_testing():
         acc_list = []
 
         for i in range(num_runs):
-            # Resetting the model on each run
+            # Resetting the model, optimizer and scheduler on each run
             model.load_state_dict(def_model.state_dict())
+            optimizer.load_state_dict(def_optim.state_dict())
+            scheduler.load_state_dict(def_sched.state_dict())
 
             # Setting up tensorboard writers
             tensorboard_writers, experiment_path = setup_tensorboard(os.path.join(experiment_folder_name,
@@ -119,17 +128,16 @@ def setup_augmentation_testing():
             setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
             
             # Training model with the current augmentation
-            model, c_labels, c_labels_pred = train_model(model, device, 
-                                                         hyp_dict["Criterion"], 
-                                                         hyp_dict["Optimizer"],
-                                                         hyp_dict["Scheduler"], 
-                                                         data_loaders,
-                                                         tensorboard_writers,
-                                                         hyp_dict["Epochs"],
-                                                         hyp_dict["PFM Flag"],
-                                                         hyp_dict["Early Limit"],
-                                                         hyp_dict["Replacement Limit"],
-                                                         experiment_path)
+            _, c_labels, c_labels_pred = train_model(model, device, 
+                                                     hyp_dict["Criterion"], 
+                                                     optimizer, scheduler, 
+                                                     data_loaders,
+                                                     tensorboard_writers,
+                                                     hyp_dict["Epochs"],
+                                                     hyp_dict["PFM Flag"],
+                                                     hyp_dict["Early Limit"],
+                                                     hyp_dict["Replacement Limit"],
+                                                     experiment_path)
             acc_list.append(acc_metric(c_labels_pred[0], c_labels[0]).item())
 
             # Closing writers for the iteration

@@ -29,11 +29,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 #           3. RandAugment (MobileNetV2 + pretrained weights + RandAugment)
 #           4. DifferentModel (ShuffleNetV2 + pretrained weights + Categorical)
 #           5. NotPretrained (MobileNetV2 + Categorical)
-# TODO: Figure out why test_augmentations.py gives terrible results
-#       -> Used to be good, >95% for all types.
-# TODO: Look into overfit/underfit per experiment
-#       -> Strong difference between validation/train accuracy indicated over/under fit.
-#       -> Fix experiments 4 and 5. Experiment 2 might not be fixable
+# TODO: Check if experiments 1-5 give roughly the same results with optimizer reset
+#       -> If not, revert optimizer reset
 # TODO: Report GPU memory usage
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
@@ -79,9 +76,12 @@ def train_model(model: torchvision.models, device: torch.device,
     """
     # Setting the preliminary model to be the best model
     best_loss = 1000
-    best_model = copy.deepcopy(model)
     early_stop = 0
     model_replacement = 0
+
+    # Saving the best model, and optimizer
+    best_model = copy.deepcopy(model)
+    best_optim = copy.deepcopy(optimizer)
 
     # Setting up performance metrics
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
@@ -163,6 +163,7 @@ def train_model(model: torchvision.models, device: torch.device,
                         model_replacement_limit != 0:
                         print("Replacing model")
                         model.load_state_dict(best_model.state_dict())
+                        optimizer.load_state_dict(best_optim.state_dict())
                         model_replacement = 0
                     if early_stop > early_stop_limit and early_stop_limit != 0:
                         print("Early stopping ")
