@@ -5,6 +5,7 @@ import json
 import os
 from PIL import Image
 import random
+import shutil
 import time
 import torch
 from torch import nn, optim
@@ -282,6 +283,22 @@ def calculate_flops(model: torchvision.models, batch_size: int, warm_up: int = 1
                                     print_profile = False, detailed = False,
                                     warm_up = warm_up)
     print(f"FLOPS = {flops}\nMACS = {macs}\nparams = {params}")
+
+
+def merge_experiments(experiment_list: list, path: str):
+    """Function that merges experiment folders into one folder.
+
+    Args:
+        experiment_list: List of experiments to be merged.
+        path: Path to the folder containing the experiments.
+    """
+    for experiment in experiment_list:
+        files = os.listdir(path)
+        for file in files:
+            if os.path.isdir(os.path.join(path, file)):
+                if file.startswith(experiment):
+                    shutil.copytree(os.path.join(path, file), os.path.join(path, experiment, file))
+                    shutil.rmtree(os.path.join(path, file))
 
 
 def get_categorical_transforms() -> tuple[list, T.Compose]:

@@ -15,7 +15,7 @@ from tqdm import tqdm
 from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
-                        report_metrics, set_classification_layer
+                        report_metrics, set_classification_layer, merge_experiments
 
 # To open tensorboard in browser:
 # Run the following command in a new terminal:
@@ -29,8 +29,6 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 #           3. RandAugment (MobileNetV2 + pretrained weights + RandAugment)
 #           4. DifferentModel (ShuffleNetV2 + pretrained weights + Categorical)
 #           5. NotPretrained (MobileNetV2 + Categorical)
-# TODO: Check if experiments 1-5 give roughly the same results with optimizer reset
-#       -> If not, revert optimizer reset
 # TODO: Report GPU memory usage
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
@@ -76,12 +74,9 @@ def train_model(model: torchvision.models, device: torch.device,
     """
     # Setting the preliminary model to be the best model
     best_loss = 1000
+    best_model = copy.deepcopy(model)
     early_stop = 0
     model_replacement = 0
-
-    # Saving the best model, and optimizer
-    best_model = copy.deepcopy(model)
-    best_optim = copy.deepcopy(optimizer)
 
     # Setting up performance metrics
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
@@ -163,7 +158,6 @@ def train_model(model: torchvision.models, device: torch.device,
                         model_replacement_limit != 0:
                         print("Replacing model")
                         model.load_state_dict(best_model.state_dict())
-                        optimizer.load_state_dict(best_optim.state_dict())
                         model_replacement = 0
                     if early_stop > early_stop_limit and early_stop_limit != 0:
                         print("Early stopping ")
@@ -258,31 +252,36 @@ def run_experiment(experiment_name: str):
         writer.close()
 
 
-def run_all_experiments():
-    """Function that runs all experiments (JSON files) in 
-    the Master-Thesis-Experiments folder.
+def setup():
+    """This function sets up experimentation. There are three methods of
+    running the experiment, this function takes care of running with
+    whatever method is specified by the input.
     """
     experiment_list = ["Experiment1-Baseline", "Experiment2-RandomApply",
                        "Experiment3-RandAugment", "Experiment4-DifferentModel",
                        "Experiment5-NotPretrained"]
-    for file in experiment_list:
-        print("Running experiment: " + file)
-        run_experiment(file)
+    path = "Master-Thesis-Experiments"
 
-
-if __name__ == '__main__':
     if len(sys.argv) > 1:
-        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1] + ".json")):
+        if os.path.exists(os.path.join(path, sys.argv[1] + ".json")):
             if len(sys.argv) == 2:
                 print("Running experiment: " + sys.argv[1])
                 run_experiment(sys.argv[1])
             else:
-                for i in range(int(sys.argv[2])):
+                for _ in range(int(sys.argv[2])):
                     print("Running experiment: " + sys.argv[1])
                     run_experiment(sys.argv[1])
+                merge_experiments([sys.argv[1]], path)
         else:
             print("Experiment not found, exiting ...")
     else:
         print("No experiment name given, running all experiments 5 times")
-        for i in range(5):            
-            run_all_experiments()
+        for _ in range(5):
+            for file in experiment_list:
+                print("Running experiment: " + file)
+                run_experiment(file)
+        merge_experiments(experiment_list, path)            
+
+
+if __name__ == '__main__':
+    setup()
