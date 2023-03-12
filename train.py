@@ -20,16 +20,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # To open tensorboard in browser:
 # Run the following command in a new terminal:
 # tensorboard --logdir=Master-Thesis-Experiments
-# TODO: Report results
-#       -> Tensorboard for graphs
-#       -> results.txt files for final accuracies
-#       -> Experiment list:
-#           1. Baseline (MobileNetV2 + Pretrained weights)
-#           2. RandomApply (MobileNetV2 + pretrained weights + RandomApply)
-#           3. RandAugment (MobileNetV2 + pretrained weights + RandAugment)
-#           4. DifferentModel (ShuffleNetV2 + pretrained weights + Categorical)
-#           5. NotPretrained (MobileNetV2 + Categorical)
-# TODO: Report GPU memory usage
+# TODO: Converting to ONNX -> TRT
+# TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
 # TODO: Start on explainability of the model

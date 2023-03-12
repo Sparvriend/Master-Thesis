@@ -1,9 +1,11 @@
 import datetime
+import colorsys
+import json
 import matplotlib.pyplot as plt
 import numpy as np
-import json
 import os
 from PIL import Image
+import pandas as pd
 import random
 import shutil
 import time
@@ -268,7 +270,7 @@ def setup_hyp_dict(experiment_name: str) -> dict:
     return hyp_dict
 
 
-def calculate_flops(model: torchvision.models, batch_size: int, warm_up: int = 10):
+def calculate_flops(model: torchvision.models, batch_size: int = 32, warm_up: int = 10):
     """ This function uses the DeepSpeed Python library to calculate the FLOPS,
     MACS and the parameters of a model. Keep in mind that the amount of FLOPS
     linearly increases with the batch size.
@@ -299,6 +301,51 @@ def merge_experiments(experiment_list: list, path: str):
                 if file.startswith(experiment):
                     shutil.copytree(os.path.join(path, file), os.path.join(path, experiment, file))
                     shutil.rmtree(os.path.join(path, file))
+
+
+def plot_results(path: str, title: str):
+    """This function is used to plot a number of experiment runs
+    into a single matplotlib plot, with legend/axis labels etc,
+    which are absent from a tensorboard representation.
+
+    Args:
+        path: Path to the folder containing the experiment runs.
+        title: Title of the plot.
+    """
+
+    # First counting how many files to plot
+    files = os.listdir(path)
+    csv_files = []
+    for file in files:
+        if file.endswith(".csv"):
+            csv_files.append(file)
+
+    # Creating colour list based on amount of files
+    num_colors = len(csv_files)
+    hue_list = [i/num_colors for i in range(num_colors)]
+    random.shuffle(hue_list)
+    color_list = []
+
+    # Converting HSV to RGB
+    for hue in hue_list:
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        color_list.append(rgb)
+
+    # Plotting all CSV files, n is the amount of charachters that the date/time
+    # entails, plus the underscores and the val flag.
+    legend = []
+    n = 20
+    for i, file in enumerate(csv_files):
+        data = pd.read_csv(os.path.join(path, file))
+        data.drop("Wall time", axis = 1, inplace = True)
+        plt.grid()
+        plt.plot(data["Step"], data["Value"], color = color_list[i], linewidth = 1.0)
+        legend.append(os.path.splitext(file)[0][:-n])
+    plt.legend(legend)
+    plt.ylabel("Accuracy") 
+    plt.xlabel("Epochs")
+    plt.title(title)
+    plt.savefig(os.path.join(path, title + ".png"))
 
 
 def get_categorical_transforms() -> tuple[list, T.Compose]:
@@ -392,3 +439,9 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
     ])
 
     return transform
+
+
+if __name__ == '__main__':
+    # train_utils is only used to calculate GFLOPS of a model or to plot results
+    #calculate_flops(model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT))
+    plot_results(os.path.join("Master-Thesis-Experiments", "Experiment reporting"), "Experiments Validation Accuracy")
