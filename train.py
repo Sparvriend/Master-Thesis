@@ -8,8 +8,6 @@ from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
 from torch.utils.data import DataLoader
 import torchvision
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
-                               shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
 from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
@@ -20,7 +18,8 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # To open tensorboard in browser:
 # Run the following command in a new terminal:
 # tensorboard --logdir=Master-Thesis-Experiments
-# TODO: Converting to ONNX -> TRT
+# TODO: Figure out why the testing FPS is so slow (Overhead probably) -> Report only GPU fps
+# TODO: Setup experiment with tinyImageNet
 # TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
@@ -249,10 +248,16 @@ def setup():
     running the experiment, this function takes care of running with
     whatever method is specified by the input.
     """
-    experiment_list = ["Experiment1-Baseline", "Experiment2-RandomApply",
-                       "Experiment3-RandAugment", "Experiment4-DifferentModel",
-                       "Experiment5-NotPretrained"]
+    # Listing the experiments, which are the JSON files
+    # Without the testaugments file, since that is only meant
+    # to be ran by test_augmentations.py
+    experiment_list = []
     path = "Master-Thesis-Experiments"
+    files = os.listdir(path)
+    for file in files:
+        if file.endswith(".json"):
+            experiment_list.append(file[:-5])
+    experiment_list.remove("TestAugments")
 
     if len(sys.argv) > 1:
         if os.path.exists(os.path.join(path, sys.argv[1] + ".json")):

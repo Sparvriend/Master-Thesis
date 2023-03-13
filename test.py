@@ -1,5 +1,4 @@
 import os
-from os import listdir
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
@@ -13,6 +12,8 @@ from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import convert_to_list, flatten_list
+from torch2trt import torch2trt
+import tensorrt as trt
 
 
 def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
@@ -68,13 +69,43 @@ def remove_predicts():
     # Path information
     path = os.path.join("data", "test_predictions")
     if os.path.exists(path):
-        files = [f for f in listdir(path) 
+        files = [f for f in os.listdir(path) 
                 if os.path.isfile(os.path.join(path, f))]
         for old_file in files:
             file_path = os.path.join(path, old_file)
             os.unlink(file_path)
     else:
         os.mkdir(path)
+
+
+def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
+    """This function takes a PyTorch model and converts it to a TensorRT model.
+    It creates a config file with a custom profile since the batch size.
+
+    Args:
+        model: Pytorch model to convert
+        data_len: The length of the testing set.
+        batch_size: The batch size of the testing set.
+    Returns:
+        TensorRT converted model.
+    """
+    # Using a trt builder to create a config and a profile
+    # Which is necessary because the batch size is variable
+    # It can change at the end, if the dataset size is not divisible by the batch size
+    norm_shape = (batch_size, 3, 224, 224)
+    builder = trt.Builder(trt.Logger())
+    config = builder.create_builder_config()
+    profile = builder.create_optimization_profile()
+
+    # Creating the profile shape and adding to config
+    profile.set_shape("input_tensor", min = (data_len % batch_size, 3, 224, 224),
+                       max = norm_shape, opt = norm_shape)
+    config.add_optimization_profile(profile)
+    
+    # Converting model to tensorRT with the builder, config and the profile
+    model = torch2trt(model, [torch.ones(norm_shape).cuda()], fp16_mode = True,
+                      max_batch_size = batch_size, builder = builder, config = config)
+    return model
 
 
 def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader):
@@ -129,12 +160,13 @@ def setup_testing(experiment_folder: str):
     # in the prediction folders
     remove_predicts()
 
-    # Setting the device to use
+    # Setting the device to use and enabling lazy loading
+    torch.cuda._lazy_init()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
     # Setting test path and creating transform. The first entry is a lambda
-    # dummy function, because it is cutoff in NTZFilterDataset. Might be
+    # dummy function, because it is cutoff in NTZFilterDataset. Should be
     # fixed in the future.
     test_path = os.path.join("data", "test")
     transform = T.Compose([
@@ -145,14 +177,24 @@ def setup_testing(experiment_folder: str):
         T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
     ])
 
-    # Creating the dataset and transferring to a DataLoader
-    test_data = NTZFilterDataset(test_path, transform)
-    test_loader = DataLoader(test_data, batch_size = 32, collate_fn = sep_test_collate,
-                             shuffle = True, num_workers = 4)
-
     # Loading the model form a experiment directory
     model = torch.load(os.path.join("Master-Thesis-Experiments", 
                                      experiment_folder, "model.pth"))
+    # ShuffleNet causes an error with the variable batch size
+    # Hence setting it to 1 to fix that
+    batch_size = 16
+    if model.__class__.__name__ == "ShuffleNetV2":
+        batch_size = 1
+
+    # Creating the dataset and transferring to a DataLoader
+    test_data = NTZFilterDataset(test_path, transform)
+    test_loader = DataLoader(test_data, batch_size = batch_size,
+                             collate_fn = sep_test_collate, shuffle = True, num_workers = 4)
+
+    # Optionally, port the model to TRT version
+    # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
+    # Takes ~30 seconds for MobileNetV2 - ~5 mins for EfficientNetB1
+    model = convert_to_trt(model, len(test_data), batch_size)
 
     # Testing the feature extractor on testing data
     test_model(model, device, test_loader)

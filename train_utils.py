@@ -15,7 +15,9 @@ from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix
 import torchvision
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
-                               shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
+                               shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights, \
+                               resnet18, ResNet18_Weights, \
+                               efficientnet_b1, EfficientNet_B1_Weights
 import torchvision.transforms as T
 from torch.utils.tensorboard import SummaryWriter
 
@@ -103,7 +105,7 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
     ax.set_yticklabels(classes)
 
     # Add colorbar and title
-    cbar = ax.figure.colorbar(im, ax=ax)
+    ax.figure.colorbar(im, ax=ax)
     ax.set_title("Confusion Matrix")
     plt.xlabel("Predicted Label")
     plt.ylabel("True Label")
@@ -111,7 +113,7 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
     # Adding text for each datapoint
     for i in range(len(classes)):
         for j in range(len(classes)):
-            text = ax.text(j, i, int(conf_mat[i, j]), ha = "center",
+            ax.text(j, i, int(conf_mat[i, j]), ha = "center",
                            va = "center", color = "w")
 
     # Adding to tensorboard
@@ -183,11 +185,13 @@ def set_classification_layer(model: torchvision.models):
         model: This is a default model, with many more classes than 4.
     """
     classes = 4
-    if model.__class__.__name__ == "MobileNetV2":
+    if model.__class__.__name__ == "MobileNetV2" or \
+       model.__class__.__name__ == "EfficientNet":
         model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
     elif model.__class__.__name__ == "ShuffleNetV2":
         model.fc = nn.Linear(in_features = 1024, out_features = classes)
-
+    elif model.__class__.__name__ == "ResNet":
+        model.fc = nn.Linear(in_features = 512, out_features = classes)
 
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     """Manual replacement of default collate function provided by PyTorch.

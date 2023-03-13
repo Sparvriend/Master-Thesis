@@ -2,10 +2,8 @@ import copy
 import numpy as np
 import os
 import torch
-from torch import nn, optim
 from torchmetrics import Accuracy
 from torch.utils.data import DataLoader
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 import torchvision.transforms as T
 from train import sep_collate, train_model
 from train_utils import get_categorical_transforms, set_classification_layer, \

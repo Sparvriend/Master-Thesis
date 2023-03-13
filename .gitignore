@@ -15,3 +15,4 @@ Master-Thesis-Experiments/results.txt
 *.jpg
 *.png
 *.jpeg
+tiny-imagenet-200/*

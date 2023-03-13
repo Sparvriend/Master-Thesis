@@ -1,6 +1,5 @@
 import numpy as np
 import os
-from os import listdir
 import random
 import shutil
 
@@ -34,7 +33,7 @@ def split_and_move():
     for data_class in DATA_CLASSES:
         # Combining path and listing all files in the path
         path = os.path.join(data_location, data_class)
-        files = [f for f in listdir(path)
+        files = [f for f in os.listdir(path)
                  if os.path.isfile(os.path.join(path, f))]
         # Removal of .ivp files and other things
         cleaned_files = []
@@ -59,7 +58,7 @@ def split_and_move():
         for destination_type in [TRAIN_DESTINATION, TEST_DESTINATION,
                                  VAL_DESTINATION]:
             path = os.path.join(destination_type, data_class)
-            files = [f for f in listdir(path)
+            files = [f for f in os.listdir(path)
                      if os.path.isfile(os.path.join(path, f))]
             for old_file in files:
                 file_path = os.path.join(path, old_file)
