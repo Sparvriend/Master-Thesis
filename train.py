@@ -23,7 +23,9 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
+# TODO: Move transform to a get_transform function
 # TODO: Start on explainability of the model
+#       -> Add explainability function to test.py
 #       -> Guided backpropagation, gradient on neurons with respect to input image
 #       -> Integrated gradients 
 #       -> Uncertainty prediction (DUQ)
