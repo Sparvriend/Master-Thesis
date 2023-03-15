@@ -352,6 +352,24 @@ def plot_results(path: str, title: str):
     plt.savefig(os.path.join(path, title + ".png"))
 
 
+def get_default_transform() -> T.Compose:
+    """This function returns a default transformation.
+    The transformation like this is used for validation/testing set.
+
+    Returns:
+        Composed elemenent of PyTorch transforms.
+        Based on MobileNetV2 PyTorch transforms.
+    """
+    transform = T.Compose([
+        T.Resize(256),
+        T.CenterCrop(224),
+        T.ToTensor(),
+        T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
+    ])
+
+    return transform
+
+
 def get_categorical_transforms() -> tuple[list, T.Compose]:
     """This function splits up augmentation into four phases, each with
     different general augmentation techniques. The idea behind it is to only
@@ -434,13 +452,9 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
                          "no_augment": T.Lambda(lambda x: x),
                          "random_apply": T.RandomOrder(combined_transforms)}
 
-    transform = T.Compose([
-        transform_options[transform_type],
-        T.Resize(256),
-        T.CenterCrop(224),
-        T.ToTensor(),
-        T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
-    ])
+    # Getting default transform and inserting selected transform type
+    transform = get_default_transform()
+    transform.transforms.insert(0, transform_options[transform_type])
 
     return transform
 

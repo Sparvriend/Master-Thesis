@@ -7,7 +7,8 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from train import sep_collate, train_model
 from train_utils import get_categorical_transforms, set_classification_layer, \
-                        setup_tensorboard, setup_hyp_file, setup_hyp_dict
+                        setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
+                        get_default_transform
 
 from NTZ_filter_dataset import NTZFilterDataset
 
@@ -26,13 +27,8 @@ def get_augment_loaders(augment: T.Compose, batch_size: int,
     Returns:
         Dictionary with train and validation loaders
     """
-    transform = T.Compose([
-        augment,
-        T.Resize(256),
-        T.CenterCrop(224),
-        T.ToTensor(),
-        T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
-    ])
+    transform = get_default_transform()
+    transform.transforms.insert(0, augment)
 
     # File paths
     train_path = os.path.join("data", "train")

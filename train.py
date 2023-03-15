@@ -23,7 +23,14 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 # TODO: Create synthetic data -> for each class, move the filter across
 #       the screen and the label across the filter (where applicable)
-# TODO: Move transform to a get_transform function
+# TODO: Look into TensorRT library, Ratnajit: Useful in addition to torch2trt?
+#       -> (https://github.com/NVIDIA/TensorRT)
+# TODO: Look into test.py converting to TRT out of memory issues
+# TODO: Swap current setups for train.py/test_augmentation.py and data_processing.py
+#       to argparse versions. -> Very nice for optional arguments
+# TODO: Apply PEP-8 to explainability.py
+# TODO: Remove --exp_folder argument from argparser in test.py? (use sys.argv instead)
+#       -> Keep other optional arguments in argparser
 # TODO: Start on explainability of the model
 #       -> Add explainability function to test.py
 #       -> Guided backpropagation, gradient on neurons with respect to input image
