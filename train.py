@@ -18,24 +18,22 @@ from train_utils import sep_collate, get_transforms, setup_tensorboard, \
 # To open tensorboard in browser:
 # Run the following command in a new terminal:
 # tensorboard --logdir=Master-Thesis-Experiments
-# TODO: Figure out why the testing FPS is so slow (Overhead probably) -> Report only GPU fps
-# TODO: Setup experiment with tinyImageNet
-# TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
-# TODO: Create synthetic data -> for each class, move the filter across
-#       the screen and the label across the filter (where applicable)
+# TODO: Figure out why the testing FPS is so slow (Overhead probably) 
+#       -> Report only GPU fps
+#       -> Appears to be as fast as doing it on the CPU? (is device CPU?)
 # TODO: Look into TensorRT library, Ratnajit: Useful in addition to torch2trt?
 #       -> (https://github.com/NVIDIA/TensorRT)
 # TODO: Look into test.py converting to TRT out of memory issues
-# TODO: Swap current setups for train.py/test_augmentation.py and data_processing.py
-#       to argparse versions. -> Very nice for optional arguments
-# TODO: Apply PEP-8 to explainability.py
-# TODO: Remove --exp_folder argument from argparser in test.py? (use sys.argv instead)
-#       -> Keep other optional arguments in argparser
+# TODO: Do a rerun of PEP8 in all files
+# TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 # TODO: Start on explainability of the model
 #       -> Add explainability function to test.py
 #       -> Guided backpropagation, gradient on neurons with respect to input image
 #       -> Integrated gradients 
 #       -> Uncertainty prediction (DUQ)
+# TODO: Create synthetic data -> for each class, move the filter across
+#       the screen and the label across the filter (where applicable)
+# TODO: Setup experiment with tinyImageNet
 # TODO: Text detection model for fourth label class?
 #       -> Need more information from client about when text is wrong.
 #       -> Just add it in and see what happens?

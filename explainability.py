@@ -1,38 +1,33 @@
 import captum
 from captum.attr import visualization as viz
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from PIL import Image
 import torch
 import torchvision.models
 import torchvision.transforms as T
-import matplotlib.pyplot as plt
-import os
-from PIL import Image
-import numpy as np
 from torch.utils.data import DataLoader
-from matplotlib.colors import LinearSegmentedColormap
-
 from train_utils import get_default_transform
 
+
 def integrated_gradients(model: torchvision.models, data_loader: DataLoader,
-                         predicted_labels: list, img_paths:list):
-    # SHAP/Captum
-    # SHAP: GradientExplainer/DeepExplainer
+                         predicted_labels: list, img_paths:list, 
+                         device: torch.device):
     # CAPTUM: IntegratedGradients/DeepLift
-    # ONLY FOR INFERENCE
 
     # Getting default transform and cutting off normalization
     transform = T.Compose(get_default_transform().transforms[:-1])
 
-    input_concat = []
+    # Concatenating torch tensors from the dataloader
+    input_concat_tensor = torch.empty((0,))
     for inputs, _ in data_loader:
-        input_concat.append(inputs)
-    
-    input_concat_tensor = input_concat[0]
-    for item in input_concat[1:]:
-        input_concat_tensor = torch.cat((input_concat_tensor, item))
+        input_concat_tensor = torch.cat((input_concat_tensor, inputs))
     
     # Creating integrated gradients object via Captum
     int_grad = captum.attr.IntegratedGradients(model)
-    attributions_ig = int_grad.attribute(input_concat_tensor.cuda(), target = predicted_labels, internal_batch_size = 16, n_steps = 200)
+    attributions_ig = int_grad.attribute(input_concat_tensor.to(device), target = predicted_labels, internal_batch_size = 16, n_steps = 200)
     # Noise tunnel causes CUDA out of memory errors
     # noise_tunnel = captum.attr.NoiseTunnel(int_grad)
     # attributions_ig_nt = noise_tunnel.attribute(inputs, nt_samples=10, nt_samples_batch_size = 16, nt_type='smoothgrad_sq', target = predicted_labels)
@@ -55,10 +50,7 @@ def integrated_gradients(model: torchvision.models, data_loader: DataLoader,
 
 
 def guided_backpropagation():
-    # SHAP/Captum
-    # SHAP: KernelExplainer
-    # Captum: GuidedBackprop
-    # ONLY FOR INFERENCE
+    # Use Captum's GuidedBackprop
     print("Not yet implemented")
 
 

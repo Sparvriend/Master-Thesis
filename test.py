@@ -14,8 +14,12 @@ from tqdm import tqdm
 from NTZ_filter_dataset import NTZFilterDataset
 from train_utils import convert_to_list, flatten_list, get_default_transform
 from explainability import integrated_gradients
-from torch2trt import torch2trt
 import tensorrt as trt
+
+try:
+    from torch2trt import torch2trt
+except ModuleNotFoundError:
+    print("Could not import torch2trt, model conversion to trt will not work")
 
 
 def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
@@ -177,7 +181,10 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     remove_predicts()
 
     # Setting the device to use and enabling lazy loading
-    torch.cuda._lazy_init()
+    try: 
+        torch.cuda._lazy_init()
+    except RuntimeError:
+        pass
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
@@ -189,8 +196,11 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     transform.transforms.insert(0, T.Lambda(lambda x: x))
 
     # Loading the model form a experiment directory
+    # Map location because if CPU, it otherwise causes issues
     model = torch.load(os.path.join("Master-Thesis-Experiments", 
-                                     experiment_folder, "model.pth"))
+                                     experiment_folder, "model.pth"), 
+                                     map_location = torch.device(device))
+    
     # ShuffleNet causes an error with the variable batch size
     # Hence setting it to 1 to fix that
     batch_size = 16
@@ -213,14 +223,20 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Optionally, explain the model using integrated gradients
     if explain_model:
-        integrated_gradients(model, test_loader, predicted_labels, img_paths)
+        integrated_gradients(model, test_loader, predicted_labels, img_paths, device)
 
 if __name__ == '__main__':
+    # Checking if required folder exists
+    if len(sys.argv) > 1:
+        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1])):
+            print("Testing on model from experiment: " + sys.argv[1])
+        else:
+            print("Experiment not found, exiting ...")
+
     # Forming argparser that takes input arguments, with optional
     # booleans for convert_trt and explain_model
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp_folder", type = str, required = True)
     parser.add_argument("--convert_trt", action = argparse.BooleanOptionalAction)
     parser.add_argument("--explain_model", action = argparse.BooleanOptionalAction)
-    args = parser.parse_args()
-    setup_testing(args.exp_folder, args.convert_trt, args.explain_model)
+    args = parser.parse_args(sys.argv[2:])
+    setup_testing(sys.argv[1], args.convert_trt, args.explain_model)
