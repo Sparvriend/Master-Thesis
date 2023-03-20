@@ -64,10 +64,9 @@ def save_test_predicts(predicted_labels: list, paths: list):
         label_name = label_dict[prediction_list[idx]]
 
         # Drawing the label and saving the image
-        # font_loc = os.path.join("C:", "Windows", "Fonts", "arial.ttf")
         font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = 18)
         draw = ImageDraw.Draw(img)
-        draw.text((10, 10), label_name, font = font, fill = (255, 0, 0))
+        draw.text((50, 10), label_name, font = font, fill = (255, 0, 0))
         img.save(os.path.join(prediction_dir, name))
 
     return prediction_list, paths
@@ -130,7 +129,8 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
         device: The device which data/model is present on.
         data_loader: The data loader contains the data to test on.
     Returns:
-        Lists of predicted labels and the image paths. 
+        Lists of predicted labels and the image paths.
+        Concatenated inputs.
     """
     # Set model to evaluating, set speed measurement variable
     model.eval()
@@ -141,6 +141,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     predicted_labels = []
     img_paths = []
     test_start = time.time()
+    input_concat = torch.empty((0,)).to(device)
 
     print("Testing phase")
     with torch.no_grad():
@@ -155,13 +156,16 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
             # Counting up total amount of images a prediction was made over
             total_imgs += len(inputs)
 
+            # Concatenating the inputs for later use in explainability.py
+            input_concat = torch.cat((input_concat, inputs))
+
     # Saving the test predictions, getting the testing time and
     # printing the fps
     testing_time = time.time() - test_start
     print("FPS = " + str(round(total_imgs / testing_time, 2)))
     prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths)
 
-    return prediction_list, img_paths_list
+    return prediction_list, img_paths_list, input_concat
 
 
 def setup_testing(experiment_folder: str, convert_trt: bool = False, 
@@ -210,7 +214,8 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     # Creating the dataset and transferring to a DataLoader
     test_data = NTZFilterDataset(test_path, transform)
     test_loader = DataLoader(test_data, batch_size = batch_size,
-                             collate_fn = sep_test_collate, shuffle = True, num_workers = 4)
+                             collate_fn = sep_test_collate, 
+                             shuffle = True, num_workers = 4)
 
     # Optionally, port the model to TRT version
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
@@ -219,11 +224,11 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
         model = convert_to_trt(model, len(test_data), batch_size)
 
     # Testing the model on testing data
-    predicted_labels, img_paths = test_model(model, device, test_loader)
+    predicted_labels, img_paths, input_concat = test_model(model, device, test_loader)
 
     # Optionally, explain the model using integrated gradients
     if explain_model:
-        integrated_gradients(model, test_loader, predicted_labels, img_paths, device)
+        integrated_gradients(model, predicted_labels, img_paths, input_concat, device)
 
 if __name__ == '__main__':
     # Checking if required folder exists
