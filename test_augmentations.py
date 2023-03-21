@@ -6,7 +6,7 @@ from torchmetrics import Accuracy
 from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from train import sep_collate, train_model
-from train_utils import get_categorical_transforms, set_classification_layer, \
+from utils import get_categorical_transforms, set_classification_layer, \
                         setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
                         get_default_transform
 

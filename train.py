@@ -11,7 +11,7 @@ import torchvision
 from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
-from train_utils import sep_collate, get_transforms, setup_tensorboard, \
+from utils import sep_collate, get_transforms, setup_tensorboard, \
                         setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
                         report_metrics, set_classification_layer, merge_experiments
 

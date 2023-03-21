@@ -274,21 +274,24 @@ def setup_hyp_dict(experiment_name: str) -> dict:
     return hyp_dict
 
 
-def calculate_flops(model: torchvision.models, batch_size: int = 32, warm_up: int = 10):
+def calculate_flops():
     """ This function uses the DeepSpeed Python library to calculate the FLOPS,
     MACS and the parameters of a model. Keep in mind that the amount of FLOPS
     linearly increases with the batch size.
-
-    Args:
-        model: PyTorch model.
-        batch_size: Batch size of the model.
-        warm_up: Number of warm up iterations before calculations are made.
     """
-    flops, macs, params = get_model_profile(model = model,
-                                    input_shape = (batch_size, 3, 224, 224),
-                                    print_profile = False, detailed = False,
-                                    warm_up = warm_up)
-    print(f"FLOPS = {flops}\nMACS = {macs}\nparams = {params}")
+    models = [mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT),
+              shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT),
+              resnet18(weights = ResNet18_Weights.DEFAULT),
+              efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)]
+
+    batch_size = 32
+    warm_up = 10
+    for model in models:
+        flops, macs, params = get_model_profile(model = model,
+                                        input_shape = (batch_size, 3, 224, 224),
+                                        print_profile = False, detailed = False,
+                                        warm_up = warm_up)
+        print(f"FLOPS = {flops}\nMACS = {macs}\nparams = {params}")
 
 
 def merge_experiments(experiment_list: list, path: str):
@@ -310,7 +313,8 @@ def merge_experiments(experiment_list: list, path: str):
 def plot_results(path: str, title: str):
     """This function is used to plot a number of experiment runs
     into a single matplotlib plot, with legend/axis labels etc,
-    which are absent from a tensorboard representation.
+    which are absent from a tensorboard representation. The data
+    should be data (csv files) downloaded from tensorboard.
 
     Args:
         path: Path to the folder containing the experiment runs.
@@ -461,5 +465,5 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
 
 if __name__ == '__main__':
     # train_utils is only used to calculate GFLOPS of a model or to plot results
-    #calculate_flops(model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT))
+    # calculate_flops()
     plot_results(os.path.join("Master-Thesis-Experiments", "Experiment reporting"), "Experiments Validation Accuracy")

@@ -32,7 +32,10 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list):
     # Iterating over all image data and saving 
     # them in combination with the original image
     for i, img in enumerate(img_data):
-        norm_img = Image.open(img_paths[i])
+        # Retrieving the image, with the label printed on it
+        img_path = os.path.join("data", "test_predictions",
+                                 os.path.normpath(img_paths[i]).split(os.sep)[-1]) 
+        norm_img = Image.open(img_path)
         norm_img = transform(norm_img)
         fig, _ = viz.visualize_image_attr_multiple(np.transpose(img.squeeze().cpu().detach().numpy(), (1,2,0)),
                                                    np.asarray(norm_img),
