@@ -1,6 +1,6 @@
 import captum
 from captum.attr import visualization as viz
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -8,6 +8,7 @@ from PIL import Image
 import torch
 import torchvision.models
 import torchvision.transforms as T
+import warnings
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list):
@@ -28,6 +29,8 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list):
                                                       (0.25, '#000000'),
                                                       (1, '#000000')],
                                                      N = 256)
+    #rainbow_colors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#2E2B5F', '#8B00FF']
+    #default_cmap = ListedColormap(rainbow_colors)
     
     # Iterating over all image data and saving 
     # them in combination with the original image
@@ -48,69 +51,70 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list):
         plt.close()
 
 
-def integrated_gradients(model: torchvision.models, predicted_labels: list,
-                         img_paths: list, input_concat: torch.Tensor, 
-                         device: torch.device, noise_tunnel: bool = False):
-    """Function that runs integrated gradients on the model.
+def explainability_setup(model: torchvision.models, img_paths: list, option: str,
+                         device: torch.device, input_concat: torch.Tensor,
+                         predicted_labels: list):
+    """Function that generates function arguments for explainability.
+    Since Captum has a very similar way of running the explainability functions
+    Doing it like this is a nice option.
 
     Args:
-        model: model to run integrated gradients on.
-        predicted_labels: list of predicted labels.
+        model: model to explain.
         img_paths: list of paths to the original images.
-        input_concat: concatenated input tensor.
-                      The input is shuffled, hence this being necessary.
+        option: name of the explainability method.
         device: device to run the model on.
-        noise_tunnel: whether to use noise tunnel or not.
+        input_concat: concatenated input tensor.
+        predicted_labels: list of predicted labels.
     """
-    print("Running integrated gradients for model explanation")
+    # Ignoring UserWarnings, since they are not helpful
+    # 1st warning is about requireing grad which it then sets
+    # 2nd warning is about setting backward hooks for ReLu activations
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        # Based on which explainability option is selected
+        # Arguments are created and passed to the explainability function
+        if option == "integrated_gradients":
+            args = {"inputs": input_concat.to(device), "target": predicted_labels,
+                    "internal_batch_size": len(predicted_labels), "n_steps": 200}
+            print("Running integrated gradients for model explanation")
+            gen_model_explainability(captum.attr.IntegratedGradients, model,
+                                    img_paths, args)
+        elif option == "saliency_map":
+            args = {"inputs": input_concat.to(device), "target": predicted_labels}
+            print("Running saliency map for model explanation")
+            gen_model_explainability(captum.attr.Saliency, model,
+                                    img_paths, args)
+        elif option == "deeplift":
+            args = {"inputs": input_concat.to(device), "target": predicted_labels}
+            print("Running deeplift for model explanation")
+            gen_model_explainability(captum.attr.DeepLift, model,
+                                    img_paths, args)
+        elif option == "guided_backpropagation":
+            args = {"inputs": input_concat.to(device), "target": predicted_labels}
+            print("Running guided backpropagation for model explanation")
+            gen_model_explainability(captum.attr.GuidedBackprop, model,
+                                    img_paths, args)
+        else:
+            print("Explainability option not valid")
+
+
+def gen_model_explainability(explain_func, model: torchvision.models,
+                             img_paths: list, args: list):
+    """Function that generates an explainability object,
+    which is basically a significance value per pixel for each image,
+    and passes it to the visualization function
     
-    # Creating integrated gradients object via Captum
-    data_len = len(predicted_labels)
-    int_grad = captum.attr.IntegratedGradients(model)
-    gradient_attr = int_grad.attribute(input_concat.to(device),
-                                         target = predicted_labels,
-                                         internal_batch_size = data_len,
-                                         n_steps = 200)
-    if noise_tunnel:
-        print("Refining integrated gradients with noise tunnel")
-        # Noise tunnel causes CUDA out of memory errors
-        # When running it with more than a few inputs
-        # Hence, running it in pairs of 2
-        gradient_attr = []
-        noise_tunnel = captum.attr.NoiseTunnel(int_grad)
-        i = 2
-        while data_len > i:
-            ig_nt_element = noise_tunnel.attribute(input_concat[i-2:i].to(device),
-                                                   target = predicted_labels[i-2:i],
-                                                   nt_samples_batch_size = 1,
-                                                   nt_samples = 10, 
-                                                   nt_type='smoothgrad_sq')
-            gradient_attr.extend(ig_nt_element)
-            i += 2
-        if data_len % 2 != 0:
-            ig_nt_element = noise_tunnel.attribute(input_concat[data_len-2:].to(device),
-                                                   target = predicted_labels[data_len-2:],
-                                                   nt_samples_batch_size = 1,
-                                                   nt_samples = 10, 
-                                                   nt_type='smoothgrad_sq')
-            gradient_attr.append(ig_nt_element[1])
-    visualize_explainability(gradient_attr, img_paths)
-
-
-def deeplift():
-    # Use Captum
-    print("Not yet implemented")
-
-
-def guided_backpropagation():
-    # Use Captum's GuidedBackprop
-    print("Not yet implemented")
-
-
-def saliency_map():
-    # Use Captum's Saliency
-    # Also possible to implement by hand
-    print("Not yet implemented")
+    Args:
+        explain_func: function that generates the explainability object.
+        model: model to explain.
+        img_paths: list of paths to the original images.
+        args: list of arguments for the explainability function.
+    """
+    # Creating explainability object via Captum
+    explainability_obj = explain_func(model)
+    # Unpacking dictionary arguments with **
+    explainability_attr = explainability_obj.attribute(**args)
+    visualize_explainability(explainability_attr, img_paths)
 
 
 def deep_uncertainty_quantification():

@@ -1,11 +1,10 @@
 # Master-Thesis-Code-Repository
 
 ## Current TODO
-* TODO: Start on explainability of the model
-      -> Add explainability function to test.py  
-      -> Guided backpropagation, gradient on neurons with respect to input image  
-      -> Integrated gradients  
-      -> Uncertainty prediction (DUQ)  
+* TODO: Finish explainability of the model
+      -> Make the explainability images overlay the original image with a better colormap
+      -> Uncertainty prediction (DUQ)
+      -> Deep Ensembles  
       -> Combine other dataset (CIFAR10) with uncertainty prediction  
       -> Look into adding augmentation to uncertainty methods
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
@@ -17,9 +16,12 @@
 * TODO: Migrate all results from experiments to a new results folder  
       -> Leave the expimerent JSON files in Master-Thesis-Experiments  
       -> Also move data/test_predictions to another location
-* TODO: Remove noise tunnel in explainability.py?
 * TODO: Look into test.py converting to TRT out of memory issues
 * TODO: Do a rerun of PEP8 in all files
+* TODO: Add a function in utils.py that calculates mean and std dev of validation accuracy  
+      -> Always run after merge_experiments and take results from results.txt
+* TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
+      -> other explain_model options should be taken from command line input
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
 * TODO: Create synthetic data  
        -> for each class, move the filter across the screen and the label across the filter (where applicable)
@@ -36,7 +38,7 @@ To open tensorboard in browser, run the following command in a new terminal: ten
 
 The JSON configuration files are used to run experiments with different hyperparameter setups. Each of the arguments in the JSON files are explained here:
 
-    Model: The model the experiment is run with, ususally MobileNetV2 or ShuffleNetV2.
+    Model: The model the experiment is run with, ususally MobileNetV2.
     Criterion: Experiment criterion for calculating the loss, usually CrossEntropyLoss
     Optimizer: The optimizer used to update the weights of the model in backpropagation, usually SGD.
     Scheduler: The learning rate scheduler used for updating the learning rate of the model. Usually MultiStepLR.
@@ -53,8 +55,7 @@ The JSON configuration files are used to run experiments with different hyperpar
 
 ### train.py
 
-train.py can be used to train a model. It can take three types of inputs as command line arguments. The first method is to give a JSON experiment configuration file, from the Master-Thesis-Experiments folder, it is not necessary to combine the path, e.g. Master-Thesis-Experiments/*.json. The second method is to not give it a JSON experiment configuration file, e.g. giving it no arguments. In doing so all JSON files for training will be selected and used for experimenting three times. The third method is to give
-it a JSON experiment configuration file, like in method 1, but to follow it by an integer, which is the amount of times the experiment will be run.
+train.py can be used to train a model. It can take three types of inputs as command line arguments. The first method is to give a JSON experiment configuration file, from the Master-Thesis-Experiments folder, it is not necessary to combine the path, e.g. Master-Thesis-Experiments/*.json. The second method is to not give it a JSON experiment configuration file, e.g. giving it no arguments. In doing so all JSON files for training will be selected and used for experimenting three times. The third method is to give it a JSON experiment configuration file, like in method 1, but to follow it by an integer, which is the amount of times the experiment will be run.
 
 ### test.py
 

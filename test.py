@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
 from utils import convert_to_list, flatten_list, get_default_transform
-from explainability import integrated_gradients
+from explainability import explainability_setup
 import tensorrt as trt
 
 try:
@@ -228,7 +228,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Optionally, explain the model using integrated gradients
     if explain_model:
-        integrated_gradients(model, predicted_labels, img_paths, input_concat, device)
+        explainability_setup(model, img_paths, "integrated_gradients", device, input_concat, predicted_labels)
 
 if __name__ == '__main__':
     # Checking if required folder exists
