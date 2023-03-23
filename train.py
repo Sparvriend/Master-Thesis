@@ -12,8 +12,9 @@ from tqdm import tqdm
 
 from NTZ_filter_dataset import NTZFilterDataset
 from utils import sep_collate, get_transforms, setup_tensorboard, \
-                        setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
-                        report_metrics, set_classification_layer, merge_experiments
+                  setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
+                  report_metrics, set_classification_layer, merge_experiments, \
+                  calculate_acc_std
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -196,7 +197,7 @@ def run_experiment(experiment_name: str):
                                       hyp_dict["Num Workers"])
 
     # Setting up tensorboard writers and writing hyperparameters
-    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name)
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
     # Replacing the output classification layer with a 4 class version
@@ -236,15 +237,16 @@ def setup():
     # Without the testaugments file, since that is only meant
     # to be ran by test_augmentations.py
     experiment_list = []
-    path = "Master-Thesis-Experiments"
-    files = os.listdir(path)
+    experiment_path = "Experiments"
+    results_path = os.path.join("Results", "Experiment-Results")
+    files = os.listdir(experiment_path)
     for file in files:
         if file.endswith(".json"):
             experiment_list.append(file[:-5])
     experiment_list.remove("TestAugments")
 
     if len(sys.argv) > 1:
-        if os.path.exists(os.path.join(path, sys.argv[1] + ".json")):
+        if os.path.exists(os.path.join(experiment_path, sys.argv[1] + ".json")):
             if len(sys.argv) == 2:
                 print("Running experiment: " + sys.argv[1])
                 run_experiment(sys.argv[1])
@@ -252,7 +254,8 @@ def setup():
                 for _ in range(int(sys.argv[2])):
                     print("Running experiment: " + sys.argv[1])
                     run_experiment(sys.argv[1])
-                merge_experiments([sys.argv[1]], path)
+                merge_experiments([sys.argv[1]], results_path)
+                calculate_acc_std([sys.argv[1]], results_path)
         else:
             print("Experiment not found, exiting ...")
     else:
@@ -261,7 +264,8 @@ def setup():
             for file in experiment_list:
                 print("Running experiment: " + file)
                 run_experiment(file)
-        merge_experiments(experiment_list, path)            
+        merge_experiments(experiment_list, results_path)
+        calculate_acc_std(experiment_list, results_path)            
 
 
 if __name__ == '__main__':

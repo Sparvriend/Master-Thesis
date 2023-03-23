@@ -1,34 +1,32 @@
 # Master-Thesis-Code-Repository
 
 ## Current TODO
-* TODO: Finish explainability of the model
-      -> Make the explainability images overlay the original image with a better colormap
-      -> Uncertainty prediction (DUQ)
+* TODO: Finish explainability of the model  
+      -> Make the explainability images overlay the original image with a better colormap  
+      -> Uncertainty prediction (DUQ)  
       -> Deep Ensembles  
       -> Combine other dataset (CIFAR10) with uncertainty prediction  
-      -> Look into adding augmentation to uncertainty methods
+      -> Look into adding augmentation to uncertainty methods  
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
-      -> Appears to be as fast as doing it on the CPU? (is device CPU?)
+      -> Appears to be as fast as doing it on the CPU? (is device CPU?)  
 * TODO: Look into TensorRT library, Ratnajit: Useful in addition to torch2trt?  
       -> (https://github.com/NVIDIA/TensorRT)  
-      -> Read about TRT/ONNX why is it faster? (Important to understand theoretically)
-* TODO: Migrate all results from experiments to a new results folder  
-      -> Leave the expimerent JSON files in Master-Thesis-Experiments  
-      -> Also move data/test_predictions to another location
-* TODO: Look into test.py converting to TRT out of memory issues
-* TODO: Do a rerun of PEP8 in all files
-* TODO: Add a function in utils.py that calculates mean and std dev of validation accuracy  
-      -> Always run after merge_experiments and take results from results.txt
+      -> Read about TRT/ONNX why is it faster? (Important to understand theoretically)  
+* TODO: Look into test.py converting to TRT out of memory issues  
+* TODO: Do a rerun of PEP8 in all files  
+* TODO: Check if cutoff_date can be used in other spots in the code
+* TODO: Add model marking to test predictions like in explainability.py  
+* TODO: Remove red colormap/blended representation in explainability.py?  
 * TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
-      -> other explain_model options should be taken from command line input
-* TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)
+      -> other explain_model options should be taken from command line input  
+* TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Create synthetic data  
-       -> for each class, move the filter across the screen and the label across the filter (where applicable)
-* TODO: Setup experiment with tinyImageNet
+       -> for each class, move the filter across the screen and the label across the filter (where applicable)  
+* TODO: Setup experiment with tinyImageNet  
 * TODO: Text detection model for fourth label class?  
-      -> Need more information from client about when text is wrong.  
-      -> Just add it in and see what happens?
+      -> Manual labelling of each date on the filter
+      -> Check if the date listed on the label is correct
 
 ### Tensorboard tip
 
@@ -55,7 +53,7 @@ The JSON configuration files are used to run experiments with different hyperpar
 
 ### train.py
 
-train.py can be used to train a model. It can take three types of inputs as command line arguments. The first method is to give a JSON experiment configuration file, from the Master-Thesis-Experiments folder, it is not necessary to combine the path, e.g. Master-Thesis-Experiments/*.json. The second method is to not give it a JSON experiment configuration file, e.g. giving it no arguments. In doing so all JSON files for training will be selected and used for experimenting three times. The third method is to give it a JSON experiment configuration file, like in method 1, but to follow it by an integer, which is the amount of times the experiment will be run.
+train.py can be used to train a model. It can take three types of inputs as command line arguments. The first method is to give a JSON experiment configuration file, from the Master-Thesis-Experiments folder, it is not necessary to combine the path, e.g. Experiments/*.json. The second method is to not give it a JSON experiment configuration file, e.g. giving it no arguments. In doing so all JSON files for training will be selected and used for experimenting three times. The third method is to give it a JSON experiment configuration file, like in method 1, but to follow it by an integer, which is the amount of times the experiment will be run.
 
 ### test.py
 

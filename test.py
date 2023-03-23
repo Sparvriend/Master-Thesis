@@ -55,7 +55,7 @@ def save_test_predicts(predicted_labels: list, paths: list):
     # Dictionary for the labels to use in saving
     label_dict = {0: "fail_label_crooked_print", 1: "fail_label_half_printed",
                   2: "fail_label_not_fully_printed", 3: "no_fail"}	
-    prediction_dir = os.path.join("data", "test_predictions")
+    prediction_dir = os.path.join("Results", "Test-Predictions")
 
     # Loading necessary information and then drawing on the label on each image.
     for idx, path in enumerate(paths):
@@ -74,10 +74,10 @@ def save_test_predicts(predicted_labels: list, paths: list):
 
 def remove_predicts():
     """Function that removes all old predictions from
-    the test_predictions folder.
+    the Test-Predictions folder.
     """
     # Path information
-    path = os.path.join("data", "test_predictions")
+    path = os.path.join("Results", "Test-Predictions")
     if os.path.exists(path):
         files = [f for f in os.listdir(path) 
                 if os.path.isfile(os.path.join(path, f))]
@@ -201,12 +201,14 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Loading the model form a experiment directory
     # Map location because if CPU, it otherwise causes issues
-    model = torch.load(os.path.join("Master-Thesis-Experiments", 
+    model = torch.load(os.path.join("Results", "Experiment-Results", 
                                      experiment_folder, "model.pth"), 
                                      map_location = torch.device(device))
     
     # ShuffleNet causes an error with the variable batch size
     # Hence setting it to 1 to fix that
+    # A batch size of 1 would more accurately represent the
+    # Real assembly line at NTZ
     batch_size = 16
     if model.__class__.__name__ == "ShuffleNetV2":
         batch_size = 1
@@ -228,12 +230,13 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Optionally, explain the model using integrated gradients
     if explain_model:
-        explainability_setup(model, img_paths, "integrated_gradients", device, input_concat, predicted_labels)
+        explainability_setup(model, img_paths, "integrated_gradients", device,
+                             input_concat, predicted_labels, experiment_folder)
 
 if __name__ == '__main__':
     # Checking if required folder exists
     if len(sys.argv) > 1:
-        if os.path.exists(os.path.join("Master-Thesis-Experiments", sys.argv[1])):
+        if os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
             print("Testing on model from experiment: " + sys.argv[1])
         else:
             print("Experiment not found, exiting ...")

@@ -165,7 +165,7 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
         writer.add_scalar(phase + "F1 score", mean_f1_score, epoch)
     
     # Writing the results to a txt file as well, for results recording
-    with open(experiment_path + "/results.txt", "a") as file:
+    with open(os.path.join(experiment_path, "results.txt"), "a") as file:
         file.write("Phase: " + phase + "\n")
         file.write("Epoch: " + str(epoch) + "\n")
         file.write("Loss = " + str(round(loss_over_epoch, 2)) + "\n")
@@ -217,7 +217,7 @@ def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     return images, labels
 
 
-def setup_tensorboard(experiment_name: str) -> tuple[list[SummaryWriter], str]:
+def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWriter], str]:
     """Function that provides tensorboard writers for training and validation.
     
     Args:
@@ -227,8 +227,7 @@ def setup_tensorboard(experiment_name: str) -> tuple[list[SummaryWriter], str]:
     """
     
     current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
-    experiment_path = os.path.join("Master-Thesis-Experiments", (experiment_name
-                                                                 + current_time)) 
+    experiment_path = os.path.join("Results", folder, (experiment_name + current_time)) 
     train_dir = os.path.join(experiment_path, "train")
     val_dir = os.path.join(experiment_path, "val")
     hyp_dir = os.path.join(experiment_path, "hyp")
@@ -260,8 +259,7 @@ def setup_hyp_dict(experiment_name: str) -> dict:
     Returns:
         Dictionary with hyperparameters.
     """
-    experiment_location = os.path.join("Master-Thesis-Experiments",
-                                       (experiment_name + ".json"))
+    experiment_location = os.path.join("Experiments", (experiment_name + ".json"))
     with open(experiment_location, "r") as f:
         hyp_dict = json.load(f)
 
@@ -295,7 +293,8 @@ def calculate_flops():
 
 
 def merge_experiments(experiment_list: list, path: str):
-    """Function that merges experiment folders into one folder.
+    """Function that merges experiment folders of the same
+    experiment runs into a single folder.
 
     Args:
         experiment_list: List of experiments to be merged.
@@ -308,6 +307,49 @@ def merge_experiments(experiment_list: list, path: str):
                 if file.startswith(experiment):
                     shutil.copytree(os.path.join(path, file), os.path.join(path, experiment, file))
                     shutil.rmtree(os.path.join(path, file))
+
+
+def calculate_acc_std(experiment_list: list, path: str):
+    """Function that combines the mean and standard deviation
+    of the validation accuracy on the final epoch over a number
+    of experiment runs. Always run after merge_experiments!!!
+    Since this function expects the experiments to be merged.
+
+    Args:
+        experiment_list: List of experiments to be combined.
+        path: Path to the folder containing the experiments.
+    """
+    for experiment in experiment_list:
+        val_acc_fe = []
+        files = os.listdir(os.path.join(path, experiment))
+        for file in files:
+            res_path = os.path.join(path, experiment, file, "results.txt")
+            with open(res_path, 'r') as res_txt:
+                # Read all the lines into a list
+                lines = res_txt.readlines()
+
+            # Extract validation accuracy on final epoch
+            # Accuracy = is 11 characters, so those are removed
+            val_acc_fe.append(float(lines[-3].strip()[11:]))
+        with open(os.path.join(path, experiment, "results.txt"), "a") as com_res:
+            com_res.write("Experiment: " + str(experiment) + "\n")
+            com_res.write("List: " + str(val_acc_fe) + "\n")
+            com_res.write("Mean validation accuracy on final epoch: "
+                          + str(np.mean(val_acc_fe)) + "\n")
+            com_res.write("Standard deviation of validation accuracy on final epoch: "
+                          + str(np.mean(val_acc_fe)) + "\n")
+            com_res.write("===========================================================\n")  
+
+
+def cutoff_date(folder_name: str):
+    """This function takes a folder in the form of a string.
+    It cuts off the date and time from the end of the string.
+    This function expects the folder name to not be in a folder.
+
+    Args:
+        folder_name: Name of the folder.
+    """
+    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-16]
 
 
 def plot_results(path: str, title: str):
@@ -466,4 +508,4 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
 if __name__ == '__main__':
     # train_utils is only used to calculate GFLOPS of a model or to plot results
     # calculate_flops()
-    plot_results(os.path.join("Master-Thesis-Experiments", "Experiment reporting"), "Experiments Validation Accuracy")
+    plot_results(os.path.join("Results", "Experiment-Results", "Experiment reporting"), "Experiments Validation Accuracy")

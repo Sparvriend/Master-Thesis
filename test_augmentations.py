@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 import os
+import shutil
 import torch
 from torchmetrics import Accuracy
 from torch.utils.data import DataLoader
@@ -61,10 +62,17 @@ def setup_augmentation_testing():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Checking if results.txt already exists, if so remove it,
-    # since it contains info from a previous run
-    if os.path.exists(os.path.join("Master-Thesis-Experiments", "results.txt")):
-        os.unlink(os.path.join("Master-Thesis-Experiments", "results.txt"))
+    # Checking if the augmentation testing path exists
+    # If not create it, if it does, remove the results from the previous run
+    path = os.path.join("Results", "Augmentation-Testing")
+    if not os.path.exists(path):
+        os.mkdir(path)
+    else:
+        for file in os.listdir(path):
+            if os.path.isfile(os.path.join(path, file)):
+                os.remove(os.path.join(path, file))
+            else:
+                shutil.rmtree(os.path.join(path, file))
 
     # Defining experiment name and retrieving hyperparameter dictionary
     experiment_name = "TestAugments"
@@ -118,7 +126,7 @@ def setup_augmentation_testing():
 
             # Setting up tensorboard writers
             tensorboard_writers, experiment_path = setup_tensorboard(os.path.join(experiment_folder_name,
-                                                                    ("Run" + str(i) + "-")))
+                                                                    ("Run" + str(i) + "-")), "Augmentation-Testing")
             setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
             
             # Training model with the current augmentation
@@ -139,7 +147,7 @@ def setup_augmentation_testing():
                 writer.close()
         
         # Opening txt file and writing average accuracy result to it
-        f = open(os.path.join("Master-Thesis-Experiments", "results.txt"), "a")
+        f = open(os.path.join("Results", "Augmentation-Testing", "results.txt"), "a")
         f.write("Mean accuracy of last epoch over " + str(num_runs) + " runs for "
                 + str(augment_type) + ": " + str(round(np.mean(acc_list), 2)))
         f.write("\nStandard deviation of last epoch over " + str(num_runs) +
