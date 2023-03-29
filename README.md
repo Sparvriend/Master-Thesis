@@ -2,10 +2,13 @@
 
 ## Current TODO
 * TODO: Finish explainability of the model  
-      -> Make the explainability images overlay the original image with a better colormap  
       -> Uncertainty prediction (DUQ)  
+          -> Fix the validation loop, since it does not work with a batch size different from 1  
+          -> Fix model loading, and add support for other models than just MobileNetV2  
+          -> Think of a method of expressing the distance as uncertainty    
+          -> Incorporate model prediction saving
       -> Deep Ensembles  
-      -> Combine other dataset (CIFAR10) with uncertainty prediction  
+      -> Combine other dataset (CIFAR10/100) with uncertainty prediction  
       -> Look into adding augmentation to uncertainty methods  
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
@@ -15,18 +18,16 @@
       -> Read about TRT/ONNX why is it faster? (Important to understand theoretically)  
 * TODO: Look into test.py converting to TRT out of memory issues  
 * TODO: Do a rerun of PEP8 in all files  
-* TODO: Check if cutoff_date can be used in other spots in the code
-* TODO: Add model marking to test predictions like in explainability.py  
-* TODO: Remove red colormap/blended representation in explainability.py?  
 * TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
       -> other explain_model options should be taken from command line input  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Create synthetic data  
        -> for each class, move the filter across the screen and the label across the filter (where applicable)  
 * TODO: Setup experiment with tinyImageNet  
-* TODO: Text detection model for fourth label class?  
-      -> Manual labelling of each date on the filter
-      -> Check if the date listed on the label is correct
+* TODO: Text detection model for fifth label class?  
+      -> Problem: Check if the date corresponds to an input date (current date)
+      -> Manual labelling of each date on the filter  
+      -> East Detector  
 
 ### Tensorboard tip
 

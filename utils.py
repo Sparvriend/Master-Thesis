@@ -19,8 +19,10 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
                                resnet18, ResNet18_Weights, \
                                efficientnet_b1, EfficientNet_B1_Weights
 import torchvision.transforms as T
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+from NTZ_filter_dataset import NTZFilterDataset
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
@@ -215,6 +217,22 @@ def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     labels = torch.stack(list(tensor_labels), dim = 0)
 
     return images, labels
+
+
+def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
+    """Manual collate function for testing dataloader.
+    It converts the images to a torch stack and returns the paths.
+
+    Args:
+        batch: batch of data items from a dataloader.
+    Returns:
+        images as torch stack and paths.
+    """
+    path, images, _ = zip(*batch)
+
+    images = torch.stack(list(images), dim = 0)
+
+    return images, path
 
 
 def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWriter], str]:
@@ -504,6 +522,50 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
 
     return transform
 
+
+def get_data_loaders(batch_size: int = 32, shuffle: bool = True, num_workers: int = 4,
+                     transform: T.Compose = get_transforms()):
+    """Function that creates the data loaders for the training, validation
+    and testing. The train set is also augmented, while the validation and
+    testing sets are not.
+
+    Args:
+        transform: Transform to be applied to the data.
+        batch_size: Batch size for the data loaders.
+        shuffle: Boolean that determines if the data should be shuffled.
+        num_workers: Number of workers for the data loaders.
+
+    Returns:
+        Dictionary with the data loaders for training, validation and testing.
+    """
+
+    # File paths
+    train_path = os.path.join("data", "train")
+    val_path = os.path.join("data", "val")
+    test_path = os.path.join("data", "test")
+
+    # Getting default transform
+    default_transform = get_default_transform()
+
+    # Creating datasets for training/validation/testing
+    # based on NTZFilterDataset class.
+    train_data = NTZFilterDataset(train_path, transform)
+    val_data = NTZFilterDataset(val_path, default_transform)
+    test_data = NTZFilterDataset(test_path, default_transform)
+
+    # Creating data loaders for training and validation
+    train_loader = DataLoader(train_data, batch_size = batch_size,
+                              collate_fn = sep_collate, shuffle = shuffle,
+                              num_workers = num_workers)
+    val_loader = DataLoader(val_data, batch_size = batch_size,
+                            collate_fn = sep_collate, shuffle = shuffle,
+                            num_workers = num_workers)
+    test_loader = DataLoader(test_data, batch_size = batch_size,
+                             collate_fn = sep_test_collate, 
+                             shuffle = shuffle, num_workers = num_workers)
+    
+    data_loaders = {"train": train_loader, "val": val_loader, "test": test_loader}
+    return data_loaders
 
 if __name__ == '__main__':
     # train_utils is only used to calculate GFLOPS of a model or to plot results

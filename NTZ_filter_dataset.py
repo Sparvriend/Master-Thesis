@@ -37,19 +37,12 @@ class NTZFilterDataset(Dataset):
         path = self.img_paths[idx]
         raw_image = Image.open(path)
 
-        # Augmenting the image if it is from the training dataset
-        if self.data_type == "train":
-            # Transforming and saving label
-            image = self.transform(raw_image)
+        # Transforming the image, it is augmented if from the training dataset
+        image = self.transform(raw_image)
+        if self.data_type == "train" or self.data_type == "val":
+            # Saving the label if it exists.
             label = self.img_labels[idx]
         else:
-            # Performing the normal transform without augmentation
-            image = T.Compose(self.transform.transforms[1:])(raw_image)
-
-            # Saving the label if it exists
-            if self.data_type == "val":
-                label = self.img_labels[idx]
-            else:
-                label = None
+            label = None
 
         return path, image, label

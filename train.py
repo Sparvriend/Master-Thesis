@@ -6,15 +6,13 @@ import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
-from torch.utils.data import DataLoader
 import torchvision
 from tqdm import tqdm
 
-from NTZ_filter_dataset import NTZFilterDataset
-from utils import sep_collate, get_transforms, setup_tensorboard, \
-                  setup_hyp_file, setup_hyp_dict, add_confusion_matrix, \
+from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
+                  setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
-                  calculate_acc_std
+                  calculate_acc_std 
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -143,38 +141,6 @@ def train_model(model: torchvision.models, device: torch.device,
 
     return model, combined_labels, combined_labels_pred
 
-def setup_data_loaders(augmentation_type: str, batch_size: int,
-                       shuffle: bool, num_workers: int) -> dict:
-    """Function that defines data loaders based on NTZFilterDataset class. It
-    combines the data loaders in a dictionary.
-
-    Returns:
-        Dictionary of the training, validation and testing data loaders.
-    """
-    # Defining the list of transforms
-    transform = get_transforms(augmentation_type)
-
-    # File paths
-    train_path = os.path.join("data", "train")
-    val_path = os.path.join("data", "val")
-
-    # Creating datasets for training and validation
-    # based on NTZFilterDataset class.
-    train_data = NTZFilterDataset(train_path, transform)
-    val_data = NTZFilterDataset(val_path, transform)
-
-    # Creating data loaders for training and validation
-    train_loader = DataLoader(train_data, batch_size = batch_size,
-                              collate_fn = sep_collate, shuffle = shuffle,
-                              num_workers = num_workers)
-    val_loader = DataLoader(val_data, batch_size = batch_size,
-                            collate_fn = sep_collate, shuffle = shuffle,
-                            num_workers = num_workers)
-
-    # Creating a dictionary for the data loaders
-    data_loaders = {"train": train_loader, "val": val_loader}
-    return data_loaders
-
 
 def run_experiment(experiment_name: str):
     """Function that does a setup of all datasets/dataloaders and proceeds to
@@ -190,11 +156,13 @@ def run_experiment(experiment_name: str):
     # Retrieving hyperparameter dictionary
     hyp_dict = setup_hyp_dict(experiment_name)
 
+    # Defining the train transforms
+    transform = get_transforms(hyp_dict["Augmentation"])
     # Retrieving data loaders
-    data_loaders = setup_data_loaders(hyp_dict["Augmentation"], 
-                                      hyp_dict["Batch Size"], 
-                                      hyp_dict["Shuffle"],
-                                      hyp_dict["Num Workers"])
+    data_loaders = get_data_loaders(hyp_dict["Batch Size"], 
+                                    hyp_dict["Shuffle"],
+                                    hyp_dict["Num Workers"],
+                                    transform)
 
     # Setting up tensorboard writers and writing hyperparameters
     tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")

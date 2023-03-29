@@ -8,11 +8,9 @@ import time
 import torch
 from torch.utils.data import DataLoader
 import torchvision
-import torchvision.transforms as T
 from tqdm import tqdm
 
-from NTZ_filter_dataset import NTZFilterDataset
-from utils import convert_to_list, flatten_list, get_default_transform
+from utils import convert_to_list, flatten_list, get_data_loaders, cutoff_date    
 from explainability import explainability_setup
 import tensorrt as trt
 
@@ -22,29 +20,14 @@ except ModuleNotFoundError:
     print("Could not import torch2trt, model conversion to trt will not work")
 
 
-def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
-    """Manual collate function for testing dataloader.
-    It converts the images to a torch stack and returns the paths.
-
-    Args:
-        batch: batch of data items from a dataloader.
-    Returns:
-        images as torch stack and paths.
-    """
-    path, images, _ = zip(*batch)
-
-    images = torch.stack(list(images), dim = 0)
-
-    return images, path
-
-
-def save_test_predicts(predicted_labels: list, paths: list):
+def save_test_predicts(predicted_labels: list, paths: list, img_destination: str):
     """Function that converts labels to a list and then saves paths and labels
     to appropriate prediction directories.
 
     Args:
         predicted_labels: list of tensors with predicted labels.
         paths: list of lists with paths (strings) to images.
+        img_destination: Designated folder to save images to.
     
     Returns:
         Prediction list and paths converted to correct format
@@ -67,7 +50,7 @@ def save_test_predicts(predicted_labels: list, paths: list):
         font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = 18)
         draw = ImageDraw.Draw(img)
         draw.text((50, 10), label_name, font = font, fill = (255, 0, 0))
-        img.save(os.path.join(prediction_dir, name))
+        img.save(os.path.join(img_destination, name))
 
     return prediction_list, paths
 
@@ -118,8 +101,9 @@ def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
     return model
 
 
-def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader):
-    """Function that tests the feature extractor model on the test dataset.
+def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader,
+               img_destination: str):
+    """Function that tests the feature model on the test dataset.
     It runs through a forward pass to get the model output and saves the
     output images to appropriate directories through the save_test_predicts
     function.
@@ -128,6 +112,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
         model: The model to test.
         device: The device which data/model is present on.
         data_loader: The data loader contains the data to test on.
+        img_destination: Designated folder to save images to.
     Returns:
         Lists of predicted labels and the image paths.
         Concatenated inputs.
@@ -163,7 +148,8 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     # printing the fps
     testing_time = time.time() - test_start
     print("FPS = " + str(round(total_imgs / testing_time, 2)))
-    prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths)
+    prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths,
+                                                         img_destination)
 
     return prediction_list, img_paths_list, input_concat
 
@@ -192,18 +178,17 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Setting test path and creating transform. The first entry is a lambda
-    # dummy function, because it is cutoff in NTZFilterDataset. Should be
-    # fixed in the future.
-    test_path = os.path.join("data", "test")
-    transform = get_default_transform()
-    transform.transforms.insert(0, T.Lambda(lambda x: x))
-
     # Loading the model form a experiment directory
     # Map location because if CPU, it otherwise causes issues
     model = torch.load(os.path.join("Results", "Experiment-Results", 
                                      experiment_folder, "model.pth"), 
                                      map_location = torch.device(device))
+    
+    # Getting experiment_name and creating the folder to paste the images in
+    experiment_name = cutoff_date(experiment_folder)
+    img_desintation = os.path.join("Results", "Test-Predictions", experiment_name)
+    if not os.path.exists(img_desintation):
+        os.mkdir(img_desintation)
     
     # ShuffleNet causes an error with the variable batch size
     # Hence setting it to 1 to fix that
@@ -214,19 +199,17 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
         batch_size = 1
 
     # Creating the dataset and transferring to a DataLoader
-    test_data = NTZFilterDataset(test_path, transform)
-    test_loader = DataLoader(test_data, batch_size = batch_size,
-                             collate_fn = sep_test_collate, 
-                             shuffle = True, num_workers = 4)
+    test_loader = get_data_loaders(batch_size)["test"]
 
     # Optionally, port the model to TRT version
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
     # Takes ~30 seconds for MobileNetV2 - ~5 mins for EfficientNetB1
     if convert_trt:
-        model = convert_to_trt(model, len(test_data), batch_size)
+        model = convert_to_trt(model, len(test_loader.dataset), batch_size)
 
     # Testing the model on testing data
-    predicted_labels, img_paths, input_concat = test_model(model, device, test_loader)
+    predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
+                                                           img_desintation)
 
     # Optionally, explain the model using integrated gradients
     if explain_model:

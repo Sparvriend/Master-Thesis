@@ -4,52 +4,11 @@ import os
 import shutil
 import torch
 from torchmetrics import Accuracy
-from torch.utils.data import DataLoader
 import torchvision.transforms as T
-from train import sep_collate, train_model
+from train import train_model
 from utils import get_categorical_transforms, set_classification_layer, \
                         setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
-                        get_default_transform
-
-from NTZ_filter_dataset import NTZFilterDataset
-
-
-def get_augment_loaders(augment: T.Compose, batch_size: int,
-                        shuffle: bool, num_workers: int) -> dict:
-    """Function that creates dataloaders for training and validation,
-    based on a specific augmentation.
-
-    Args:
-        augment: The augmentation to combine for the transform.
-        batch_size: How many samples per batch.
-        shuffle: Whether to shuffle the data.
-        num_workers: number of workers for dataloaders
-
-    Returns:
-        Dictionary with train and validation loaders
-    """
-    transform = get_default_transform()
-    transform.transforms.insert(0, augment)
-
-    # File paths
-    train_path = os.path.join("data", "train")
-    val_path = os.path.join("data", "val")
-
-    # Creating datasets for training, validation and testing data,
-    # based on NTZFilterDataset class.
-    train_data = NTZFilterDataset(train_path, transform)
-    val_data = NTZFilterDataset(val_path, transform)
-
-    # Creating data loaders for training, validation and testing data
-    train_loader = DataLoader(train_data, batch_size = batch_size,
-                              collate_fn = sep_collate, shuffle = shuffle,
-                              num_workers = num_workers)
-    val_loader = DataLoader(val_data, batch_size = batch_size,
-                            collate_fn = sep_collate, shuffle = shuffle,
-                            num_workers = num_workers)
-    
-    data_loaders = {"train": train_loader, "val": val_loader}
-    return data_loaders
+                        get_default_transform, get_data_loaders
 
 
 def setup_augmentation_testing():
@@ -110,10 +69,12 @@ def setup_augmentation_testing():
         experiment_folder_name = experiment_name + "-" + augment_type
 
         # Retrieving data loaders for the current augmentation
-        data_loaders = get_augment_loaders(augment, 
-                                           hyp_dict["Batch Size"],
-                                           hyp_dict["Shuffle"],
-                                           hyp_dict["Num Workers"])
+        transform = get_default_transform()
+        transform.transforms.insert(0, augment)
+        data_loaders = get_data_loaders(hyp_dict["Batch Size"],
+                                        hyp_dict["Shuffle"],
+                                        hyp_dict["Num Workers"],
+                                        transform)
         
         # Resetting avg accuracy matrix
         acc_list = []
