@@ -1,8 +1,5 @@
 import argparse
 import os
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
 import sys
 import time
 import torch
@@ -10,7 +7,8 @@ from torch.utils.data import DataLoader
 import torchvision
 from tqdm import tqdm
 
-from utils import convert_to_list, flatten_list, get_data_loaders, cutoff_date    
+from utils import get_data_loaders, cutoff_date, save_test_predicts, \
+                  remove_predicts    
 from explainability import explainability_setup
 import tensorrt as trt
 
@@ -18,57 +16,6 @@ try:
     from torch2trt import torch2trt
 except ModuleNotFoundError:
     print("Could not import torch2trt, model conversion to trt will not work")
-
-
-def save_test_predicts(predicted_labels: list, paths: list, img_destination: str):
-    """Function that converts labels to a list and then saves paths and labels
-    to appropriate prediction directories.
-
-    Args:
-        predicted_labels: list of tensors with predicted labels.
-        paths: list of lists with paths (strings) to images.
-        img_destination: Designated folder to save images to.
-    
-    Returns:
-        Prediction list and paths converted to correct format
-    """
-    prediction_list = convert_to_list(predicted_labels)
-    paths = flatten_list(paths)
-
-    # Dictionary for the labels to use in saving
-    label_dict = {0: "fail_label_crooked_print", 1: "fail_label_half_printed",
-                  2: "fail_label_not_fully_printed", 3: "no_fail"}	
-    prediction_dir = os.path.join("Results", "Test-Predictions")
-
-    # Loading necessary information and then drawing on the label on each image.
-    for idx, path in enumerate(paths):
-        name = os.path.normpath(path).split(os.sep)[-1]
-        img = Image.open(path)
-        label_name = label_dict[prediction_list[idx]]
-
-        # Drawing the label and saving the image
-        font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = 18)
-        draw = ImageDraw.Draw(img)
-        draw.text((50, 10), label_name, font = font, fill = (255, 0, 0))
-        img.save(os.path.join(img_destination, name))
-
-    return prediction_list, paths
-
-
-def remove_predicts():
-    """Function that removes all old predictions from
-    the Test-Predictions folder.
-    """
-    # Path information
-    path = os.path.join("Results", "Test-Predictions")
-    if os.path.exists(path):
-        files = [f for f in os.listdir(path) 
-                if os.path.isfile(os.path.join(path, f))]
-        for old_file in files:
-            file_path = os.path.join(path, old_file)
-            os.unlink(file_path)
-    else:
-        os.mkdir(path)
 
 
 def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
@@ -166,10 +113,6 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
         The model, the dataloader and the device.
         For usage in explainability.py
     """
-    # First removing all old predictions that might be present
-    # in the prediction folders
-    remove_predicts()
-
     # Setting the device to use and enabling lazy loading
     try: 
         torch.cuda._lazy_init()
@@ -186,9 +129,11 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     
     # Getting experiment_name and creating the folder to paste the images in
     experiment_name = cutoff_date(experiment_folder)
-    img_desintation = os.path.join("Results", "Test-Predictions", experiment_name)
-    if not os.path.exists(img_desintation):
-        os.mkdir(img_desintation)
+    img_destination = os.path.join("Results", "Test-Predictions", experiment_name)
+
+    # Removing all old predictions that might be present
+    # in the prediction folder
+    remove_predicts(img_destination)
     
     # ShuffleNet causes an error with the variable batch size
     # Hence setting it to 1 to fix that
@@ -209,7 +154,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Testing the model on testing data
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
-                                                           img_desintation)
+                                                           img_destination)
 
     # Optionally, explain the model using integrated gradients
     if explain_model:

@@ -3,10 +3,8 @@
 ## Current TODO
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
-          -> Fix the validation loop, since it does not work with a batch size different from 1  
           -> Fix model loading, and add support for other models than just MobileNetV2  
           -> Think of a method of expressing the distance as uncertainty    
-          -> Incorporate model prediction saving
       -> Deep Ensembles  
       -> Combine other dataset (CIFAR10/100) with uncertainty prediction  
       -> Look into adding augmentation to uncertainty methods  

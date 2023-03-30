@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
 import pandas as pd
 import random
 import shutil
@@ -168,8 +170,8 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     
     # Writing the results to a txt file as well, for results recording
     with open(os.path.join(experiment_path, "results.txt"), "a") as file:
-        file.write("Phase: " + phase + "\n")
-        file.write("Epoch: " + str(epoch) + "\n")
+        file.write("Phase = " + phase + "\n")
+        file.write("Epoch = " + str(epoch) + "\n")
         file.write("Loss = " + str(round(loss_over_epoch, 2)) + "\n")
         file.write("Accuracy = " + str(round(mean_accuracy, 2)) + "\n")
         file.write("F1 score = " + str(round(mean_f1_score, 2)) + "\n")
@@ -233,6 +235,61 @@ def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
     images = torch.stack(list(images), dim = 0)
 
     return images, path
+
+def remove_predicts(path):
+    """Function that removes all old predictions from a
+    test prediction folder given in the path.
+
+    Args:
+        path: The path to the folder with the old predictions.
+    """
+    if os.path.exists(path):
+        files = [f for f in os.listdir(path) 
+                if os.path.isfile(os.path.join(path, f))]
+        for old_file in files:
+            file_path = os.path.join(path, old_file)
+            os.unlink(file_path)
+    else:
+        os.mkdir(path)
+
+
+def save_test_predicts(predicted_labels: list, paths: list, img_destination: str):
+    """Function that converts labels to a list and then saves paths and labels
+    to appropriate prediction directories. The prediction directory in
+    img_destination, should already exist, when running remove_predicts
+    somewhere before it.
+
+    Args:
+        predicted_labels: list of tensors with predicted labels.
+        paths: list of lists with paths (strings) to images.
+        img_destination: Designated folder to save images to.
+    
+    Returns:
+        Prediction list and paths converted to correct format
+    """
+    # If the list is not a list of torch tensors, do not convert
+    # This is the case in DUQ since the labels are calculated manually
+    if type(predicted_labels[0]) == torch.Tensor:
+        predicted_labels = convert_to_list(predicted_labels)
+    paths = flatten_list(paths)
+
+    # Dictionary for the labels to use in saving
+    label_dict = {0: "fail_label_crooked_print", 1: "fail_label_half_printed",
+                  2: "fail_label_not_fully_printed", 3: "no_fail"}	
+
+    # Loading necessary information and then drawing on the label on each image.
+    for idx, path in enumerate(paths):
+        name = os.path.normpath(path).split(os.sep)[-1]
+        img = Image.open(path)
+        label_name = label_dict[predicted_labels[idx]]
+
+        # Drawing the label and saving the image
+        font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = 18)
+        draw = ImageDraw.Draw(img)
+        draw.text((50, 10), label_name, font = font, fill = (255, 0, 0))
+        img.save(os.path.join(img_destination, name))
+
+    return predicted_labels, paths
 
 
 def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWriter], str]:

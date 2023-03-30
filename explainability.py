@@ -12,7 +12,8 @@ import torchvision.transforms as T
 from tqdm import tqdm
 import warnings
 
-from utils import cutoff_date, flatten_list, get_data_loaders
+from utils import cutoff_date, flatten_list, get_data_loaders, \
+                  save_test_predicts, remove_predicts
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desintation: str):
@@ -134,27 +135,54 @@ def gen_model_explainability(explain_func, model: torchvision.models,
     visualize_explainability(explainability_attr, img_paths, img_desintation)
 
 
+def compare_feature_maps(feature_map: torch.Tensor, class_centroids: dict,
+                         predicted_labels: list, distances: list) -> tuple[list, list]:
+    """Function that compares the feature map of an image to the class
+    centroids. It calculates the euclidean distance to the closest class
+    centroid which is the label prediction, the distance is the uncertainty.
+    
+    Args:
+        feature_map: feature map of the image.
+        class_centroids: dictionary with class centroids.
+        predicted_labels: list of predicted labels.
+        distances: list of distances to the class centroids.
+    Returns:
+        The list of predicted labels and distances for 
+        the feature map comparison
+    """
+    centroid_dist = []
+    for _, class_centroid in class_centroids.items():
+        # Convert to cpu, since that is what numpy requires
+        feature_map = feature_map.cpu()
+        class_centroid = class_centroid.cpu()
+        # Calculating the euclidean distance between the two feature maps
+        centroid_dist.append(np.linalg.norm(feature_map - class_centroid))
+    predicted_labels.append(centroid_dist.index(min(centroid_dist)))
+    distances.append(centroid_dist)
+
+    return predicted_labels, distances
+
 def deep_uncertainty_quantification():
     """Function that calculates deep uncertainty based on
     radial basis function (RBF). It calculates uncertainty
     based on the distance to average centroids. It is a
     seperate testing module, since it predicts its own labels.
     """
-
     # Setting up the device to run the model on
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # with a batch size other than 1, DUQ does not work (validation loop errors)
-    batch_size = 1
-    data_loaders = get_data_loaders(batch_size = batch_size)
+    # Setting batch size and retrieving data loaders
+    batch_size = 16
+    data_loaders = get_data_loaders(batch_size)
     val_loader = data_loaders["val"]
     test_loader = data_loaders["test"]
 
-    # Loading model
+    # Loading model and defining experiment name
     model = torch.load(os.path.join("Results", "Experiment-Results", 
                                      "Experiment3-MBNV2-RandAugment29-03-2023-13-16", "model.pth"), 
                                      map_location = torch.device(device))
+    experiment_name = "Experiment3-MBNV2-RandAugment"
     
     # Altering the classifier of the feature extractor to get a feature map
     # Resulting in a 1280x7x7x1 feature map, 
@@ -170,15 +198,19 @@ def deep_uncertainty_quantification():
     class_dict = {0: [], 1: [], 2: [], 3: []}
 
     # Running model/feature extraction prediction on validation set
+    print("Calculating average centroids over validation data")
     with torch.no_grad():
         for inputs, _ in tqdm(val_loader):
             inputs = inputs.to(device)
 
             # Getting model output for the feature maps and the labels
             model_output = model(inputs)
-            feature_map = feature_extractor(inputs)
-            predicted_label = model_output.argmax(dim=1)
-            class_dict[predicted_label.item()].append(feature_map)
+            feature_maps = feature_extractor(inputs)
+            predicted_labels = model_output.argmax(dim=1)
+            
+            # Looping over feature maps and labels
+            for idx, feature_map in enumerate(feature_maps):
+                class_dict[predicted_labels[idx].item()].append(feature_map)
 
     # Calculating average feature maps for the predictions
     class_centroids = {0: [], 1: [], 2: [], 3: []}
@@ -193,32 +225,21 @@ def deep_uncertainty_quantification():
     distances = []
     predicted_labels = []
     img_paths = []
+    print("Comparing test data to average centroids")
     with torch.no_grad():
         for inputs, paths in tqdm(test_loader):
             inputs = inputs.to(device)
 
-            # Getting feature maps
+            # Getting feature maps and saving image paths
             feature_maps = feature_extractor(inputs)
-            
-            # Accounting for batches
-            if len(feature_maps) == 1:
-                feature_maps = [feature_maps]
-            for feature_map in feature_maps:
-                centroid_dist = []
-                for _, class_centroid in class_centroids.items():
-                    # Convert to cpu, since that is what numpy requires
-                    feature_map = feature_map.cpu()
-                    class_centroid = class_centroid.cpu()
-                    # Calculating the euclidean distance between the two feature maps
-                    centroid_dist.append(np.linalg.norm(feature_map - class_centroid))
-
-                predicted_labels.append(centroid_dist.index(min(centroid_dist)))
-                distances.append(centroid_dist)
             img_paths.append(paths)
-
-    # Flattening the list of lists
-    img_paths = flatten_list(img_paths)
-
+            
+            # Comparing each feature map to class centroids
+            for feature_map in feature_maps:
+                predicted_labels, distances = compare_feature_maps(feature_map, 
+                                                                   class_centroids,
+                                                                   predicted_labels,
+                                                                   distances)
     # Basing the maximum distance on a difference of 1 in each feature
     # of the feature map. With the minimum distance being 0
     max_distance = np.prod(feature_map.shape)
@@ -229,12 +250,19 @@ def deep_uncertainty_quantification():
     # (Even when inserting images that are nothing like the dataset)
     # and 70-140 when it is the right class, but comparing 400 to 
     # 62720 does not give any indicative metric.
-    for idx, distance_list in enumerate(distances):
-        print(distance_list)
-        uncertainty = 1 - (min(distance_list) / max_distance)
-        print("Image = " + img_paths[idx])
-        print("Predicted label = " + str(predicted_labels[idx]))
-        print("Uncertainty = " + str(uncertainty) + "\n")
+    img_destination = os.path.join("Results", "Explainability-Results", "DUQ-" +
+                                    experiment_name)
+    remove_predicts(img_destination)
+    save_test_predicts(predicted_labels, img_paths, img_destination)
+    img_paths = flatten_list(img_paths)
+    with open(os.path.join(img_destination, "results.txt"), "a") as file:
+        for idx, distance_list in enumerate(distances):
+            uncertainty = 1 - (min(distance_list) / max_distance)
+            file.write("distance list = " + str(distance_list) + "\n")
+            file.write("Image = " + img_paths[idx] + "\n")
+            file.write("Predicted label = " + str(predicted_labels[idx]) + "\n")
+            file.write("Uncertainty = " + str(uncertainty) + "\n\n")
+    file.close()
 
 
 def deep_ensemble_uncertainty():
