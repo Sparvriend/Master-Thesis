@@ -201,18 +201,8 @@ def setup():
     running the experiment, this function takes care of running with
     whatever method is specified by the input.
     """
-    # Listing the experiments, which are the JSON files
-    # Without the testaugments file, since that is only meant
-    # to be ran by test_augmentations.py
-    experiment_list = []
     experiment_path = "Experiments"
     results_path = os.path.join("Results", "Experiment-Results")
-    files = os.listdir(experiment_path)
-    for file in files:
-        if file.endswith(".json"):
-            experiment_list.append(file[:-5])
-    experiment_list.remove("TestAugments")
-
     if len(sys.argv) > 1:
         if os.path.exists(os.path.join(experiment_path, sys.argv[1] + ".json")):
             if len(sys.argv) == 2:
@@ -227,6 +217,16 @@ def setup():
         else:
             print("Experiment not found, exiting ...")
     else:
+        # Listing the experiments, which are the JSON files
+        # Without the testaugments file, since that is only meant
+        # to be ran by test_augmentations.py
+        experiment_list = []
+        files = os.listdir(experiment_path)
+        for file in files:
+            if file.endswith(".json"):
+                experiment_list.append(file[:-5])
+        experiment_list.remove("TestAugments")
+
         print("No experiment name given, running all experiments 5 times")
         for _ in range(5):
             for file in experiment_list:

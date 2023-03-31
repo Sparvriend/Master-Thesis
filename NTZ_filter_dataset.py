@@ -13,7 +13,7 @@ class NTZFilterDataset(Dataset):
     def __init__(self, data_path: str, transform: T.Compose):
         self.img_paths = []
         self.img_labels = []
-        self.data_type = os.path.normpath(data_path).split(os.sep)[1]
+        self.data_type = os.path.normpath(data_path).split(os.sep)[2]
         self.transform = transform  
 
         # Setting the paths for each image and a label if it concerns training

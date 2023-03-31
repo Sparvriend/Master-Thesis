@@ -50,7 +50,7 @@ def template_matching(path):
 
 def create_synthetic_data():
     # First practicing with a single image
-    path = os.path.join("data", "train", "fail_label_not_fully_printed")
+    path = os.path.join("NTZFilterDataset", "data", "train", "fail_label_not_fully_printed")
     im = Image.open(os.path.join(path, "20230130_131235(002)_No.70.bmp"))
     
     #get_edges(im)

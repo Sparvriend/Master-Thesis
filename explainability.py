@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from PIL import Image
+import sys
 import torch
 import torchvision.models
 import torchvision.transforms as T
@@ -13,7 +14,7 @@ from tqdm import tqdm
 import warnings
 
 from utils import cutoff_date, flatten_list, get_data_loaders, \
-                  save_test_predicts, remove_predicts
+                  save_test_predicts, remove_predicts, cutoff_classification_layer
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desintation: str):
@@ -162,11 +163,14 @@ def compare_feature_maps(feature_map: torch.Tensor, class_centroids: dict,
 
     return predicted_labels, distances
 
-def deep_uncertainty_quantification():
+def deep_uncertainty_quantification(experiment_name: str):
     """Function that calculates deep uncertainty based on
     radial basis function (RBF). It calculates uncertainty
     based on the distance to average centroids. It is a
     seperate testing module, since it predicts its own labels.
+
+    Args:
+        experiment_name: name of the model to run DUQ on.
     """
     # Setting up the device to run the model on
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -179,16 +183,15 @@ def deep_uncertainty_quantification():
     test_loader = data_loaders["test"]
 
     # Loading model and defining experiment name
-    model = torch.load(os.path.join("Results", "Experiment-Results", 
-                                     "Experiment3-MBNV2-RandAugment29-03-2023-13-16", "model.pth"), 
+    model = torch.load(os.path.join("Results", "Experiment-Results",
+                                     experiment_name, "model.pth"), 
                                      map_location = torch.device(device))
-    experiment_name = "Experiment3-MBNV2-RandAugment"
+    experiment_name = cutoff_date(experiment_name)
     
-    # Altering the classifier of the feature extractor to get a feature map
-    # Resulting in a 1280x7x7x1 feature map, 
-    # that is normally inserted into the classifier
+    # Making a copy of the model with the classification layer cut off
+    # To form a model that outputs a feature map instead of a a class
     feature_extractor = copy.deepcopy(model)
-    feature_extractor = torch.nn.Sequential(*(list(feature_extractor.children())[:-1]))
+    feature_extractor = cutoff_classification_layer(feature_extractor)
 
     # Set model to evaluating
     model.eval()
@@ -267,8 +270,12 @@ def deep_uncertainty_quantification():
 
 def deep_ensemble_uncertainty():
    # Hardest to implement? -> No clear library available
-   # During training time/testing time.
+   # Testing module, but can not import test_model due to circular imports
     print("Not yet implemented")
 
 if __name__ == '__main__':
-    deep_uncertainty_quantification()
+    # Running DUQ on a model that has been through training phase
+    if len(sys.argv) == 2 and os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
+        deep_uncertainty_quantification(sys.argv[1])
+    else:
+        print("No valid experiment name given, exiting ...")

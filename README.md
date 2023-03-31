@@ -3,11 +3,15 @@
 ## Current TODO
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
-          -> Fix model loading, and add support for other models than just MobileNetV2  
-          -> Think of a method of expressing the distance as uncertainty    
-      -> Deep Ensembles  
-      -> Combine other dataset (CIFAR10/100) with uncertainty prediction  
+          -> Think of a method of expressing the distance as uncertainty  
+      -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
+* TODO: Implement dataset loading instead of default NTZFilterDataset  
+      -> CIFAR10/100  
+      -> Problem: To load models for prediction on testing data, you need to know the type of dataset,  
+      but that is currently not saved as a result, and it would be odd.  
+      -> Form experiments for CIFAR dataset and check if they are good  
+      -> Combine CIFAR dataset with uncertainty  
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
       -> Appears to be as fast as doing it on the CPU? (is device CPU?)  
@@ -21,7 +25,8 @@
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Create synthetic data  
        -> for each class, move the filter across the screen and the label across the filter (where applicable)  
-* TODO: Setup experiment with tinyImageNet  
+* TODO: Setup a preliminary function in addition to data_processing, that sets up all directories required:  
+       -> For example all directories in Results, since they are required by other mkdir commands
 * TODO: Text detection model for fifth label class?  
       -> Problem: Check if the date corresponds to an input date (current date)
       -> Manual labelling of each date on the filter  

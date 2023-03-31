@@ -197,6 +197,28 @@ def set_classification_layer(model: torchvision.models):
     elif model.__class__.__name__ == "ResNet":
         model.fc = nn.Linear(in_features = 512, out_features = classes)
 
+
+def cutoff_classification_layer(model: torchvision.models):
+    """This function removes the final classification layer
+    from a PyTorch deep learning model. Since the models
+    differ in how they are structured, this is variable.
+
+    Args: 
+        model: Model to cut the classification layer from.
+    """
+    if model.__class__.__name__ == "MobileNetV2" or \
+       model.__class__.__name__ == "ShuffleNetV2":
+        # For MobileNetV2 get a 1280x7x7x1 feature map
+        # For ShuffleNetV2 get a 1024x7x7x1 feature map
+        model = torch.nn.Sequential(*(list(model.children())[:-1]))
+    elif model.__class__.__name__ == "ResNet" or \
+        model.__class__.__name__ == "EfficientNet":
+        # For ResNet18 get a 512x7x7x1 feature map
+        # For EfficientNetB1 get a 1280x7x7x1 feature map
+        model = torch.nn.Sequential(*(list(model.children())[:-2]))
+    return model
+
+
 def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     """Manual replacement of default collate function provided by PyTorch.
     The function removes the augmentation and the path that is normally
@@ -580,8 +602,8 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
     return transform
 
 
-def get_data_loaders(batch_size: int = 32, shuffle: bool = True, num_workers: int = 4,
-                     transform: T.Compose = get_transforms()):
+def get_data_loaders(batch_size: int = 32, shuffle: bool = True, 
+                     num_workers: int = 4, transform: T.Compose = get_transforms()):
     """Function that creates the data loaders for the training, validation
     and testing. The train set is also augmented, while the validation and
     testing sets are not.
@@ -595,11 +617,10 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True, num_workers: in
     Returns:
         Dictionary with the data loaders for training, validation and testing.
     """
-
     # File paths
-    train_path = os.path.join("data", "train")
-    val_path = os.path.join("data", "val")
-    test_path = os.path.join("data", "test")
+    train_path = os.path.join("data", "NTZFilterDataset", "train")
+    val_path = os.path.join("data", "NTZFilterDataset", "val")
+    test_path = os.path.join("data", "NTZFilterDataset", "test")
 
     # Getting default transform
     default_transform = get_default_transform()
