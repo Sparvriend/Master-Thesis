@@ -1,6 +1,7 @@
 import copy
 import captum
 from captum.attr import visualization as viz
+import json
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,10 +15,14 @@ from tqdm import tqdm
 import warnings
 
 from utils import cutoff_date, flatten_list, get_data_loaders, \
-                  save_test_predicts, remove_predicts, cutoff_classification_layer
+                  save_test_predicts, remove_predicts, cutoff_classification_layer, \
+                  get_num_classes
+
+from NTZ_filter_dataset import NTZFilterDataset
+from CIFAR_dataset import CIFAR10Dataset
 
 
-def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desintation: str):
+def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
     """Function that visualizes an explainability result.
     It combines the original image with image data that explains
     the decision making of the model.
@@ -25,10 +30,13 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desint
     Args:
         img_data: torch tensor with image data.
         img_paths: list of paths to the original images.
-        img_desintation: path to folder to save the images in.
+        img_destination: path to folder to save the images in.
     """
     # Custom transform for only resizing and then cropping to center
     transform = T.Compose([T.Resize(256, max_size = 320), T.CenterCrop(224)])
+
+    # Setting experiment name
+    experiment_name = os.path.normpath(img_destination).split(os.sep)[-1]
 
     # Creating custom colormaps
     bw_cmap = LinearSegmentedColormap.from_list("custom bw",
@@ -41,8 +49,8 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desint
     # them in combination with the original image
     for i, img in enumerate(img_data):
         # Retrieving the image, with the label printed on it
-        img_path = os.path.join("Results", "Test-Predictions",
-                                 os.path.normpath(img_paths[i]).split(os.sep)[-1]) 
+        img_name = os.path.normpath(img_paths[i]).split(os.sep)[-1]
+        img_path = os.path.join("Results", "Test-Predictions",  experiment_name, img_name) 
         norm_img = Image.open(img_path)
         norm_img = transform(norm_img)
         exp_img = np.transpose(img.squeeze().cpu().detach().numpy(), (1,2,0))
@@ -54,7 +62,7 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_desint
                                                    show_colorbar = True)
 
         img_name = os.path.normpath(img_paths[i]).split(os.sep)[-1]
-        fig.savefig(os.path.join(img_desintation, img_name.replace(".bmp", ".png")))
+        fig.savefig(os.path.join(img_destination, img_name.replace(".bmp", ".png")))
         plt.close()
 
 
@@ -91,27 +99,25 @@ def explainability_setup(model: torchvision.models, img_paths: list, option: str
         warnings.filterwarnings("ignore", category=UserWarning)
         # Based on which explainability option is selected
         # Arguments are created and passed to the explainability function
+        args = {"inputs": input_concat.to(device), "target": predicted_labels} 
         if option == "integrated_gradients":
-            args = {"inputs": input_concat.to(device), "target": predicted_labels,
-                    "internal_batch_size": len(predicted_labels), "n_steps": 200}
+            args["internal_batch_size"] = len(predicted_labels)
+            args["n_steps"] = 200
             print("Running integrated gradients for model explanation")
             gen_model_explainability(captum.attr.IntegratedGradients, model,
-                                    img_paths, args, img_desintation)
+                                     img_paths, args, img_desintation)
         elif option == "saliency_map":
-            args = {"inputs": input_concat.to(device), "target": predicted_labels}
             print("Running saliency map for model explanation")
             gen_model_explainability(captum.attr.Saliency, model,
-                                    img_paths, args, img_desintation)
+                                     img_paths, args, img_desintation)
         elif option == "deeplift":
-            args = {"inputs": input_concat.to(device), "target": predicted_labels}
             print("Running deeplift for model explanation")
             gen_model_explainability(captum.attr.DeepLift, model,
-                                    img_paths, args, img_desintation)
+                                     img_paths, args, img_desintation)
         elif option == "guided_backpropagation":
-            args = {"inputs": input_concat.to(device), "target": predicted_labels}
             print("Running guided backpropagation for model explanation")
             gen_model_explainability(captum.attr.GuidedBackprop, model,
-                                    img_paths, args, img_desintation)
+                                     img_paths, args, img_desintation)
         else:
             print("Explainability option not valid")
 
@@ -176,17 +182,27 @@ def deep_uncertainty_quantification(experiment_name: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Setting batch size and retrieving data loaders
+    # Setting batch size
     batch_size = 16
-    data_loaders = get_data_loaders(batch_size)
-    val_loader = data_loaders["val"]
-    test_loader = data_loaders["test"]
 
     # Loading model and defining experiment name
     model = torch.load(os.path.join("Results", "Experiment-Results",
                                      experiment_name, "model.pth"), 
                                      map_location = torch.device(device))
     experiment_name = cutoff_date(experiment_name)
+
+    # Setting the type of dataset for DUQ
+    experiment_location = os.path.join("Experiments", experiment_name + ".json")
+    with open(experiment_location, "r") as file:
+        dataset = eval(json.load(file)["Dataset"])
+
+    # Setting the amount of classes
+    classes = get_num_classes(dataset) 
+
+    # Retrieving data loaders based on dataset type
+    data_loaders = get_data_loaders(batch_size, dataset = dataset)
+    val_loader = data_loaders["val"]
+    test_loader = data_loaders["test"]
     
     # Making a copy of the model with the classification layer cut off
     # To form a model that outputs a feature map instead of a a class
@@ -198,7 +214,9 @@ def deep_uncertainty_quantification(experiment_name: str):
     feature_extractor.eval()
 
     # Creating a class dict for storing feature maps per class
-    class_dict = {0: [], 1: [], 2: [], 3: []}
+    class_dict = {}
+    for c in range(classes):
+        class_dict[c] = []
 
     # Running model/feature extraction prediction on validation set
     print("Calculating average centroids over validation data")
@@ -215,8 +233,12 @@ def deep_uncertainty_quantification(experiment_name: str):
             for idx, feature_map in enumerate(feature_maps):
                 class_dict[predicted_labels[idx].item()].append(feature_map)
 
+    # Setting up class centroid dictionary
+    class_centroids = {}
+    for c in range(classes):
+        class_centroids[c] = []
+
     # Calculating average feature maps for the predictions
-    class_centroids = {0: [], 1: [], 2: [], 3: []}
     for c_label, feature_maps in class_dict.items():
         summed_feature_maps = torch.zeros(feature_maps[0].shape).to(device)
         for feature_map in feature_maps:
@@ -256,7 +278,7 @@ def deep_uncertainty_quantification(experiment_name: str):
     img_destination = os.path.join("Results", "Explainability-Results", "DUQ-" +
                                     experiment_name)
     remove_predicts(img_destination)
-    save_test_predicts(predicted_labels, img_paths, img_destination)
+    save_test_predicts(predicted_labels, img_paths, img_destination, val_loader.dataset)
     img_paths = flatten_list(img_paths)
     with open(os.path.join(img_destination, "results.txt"), "a") as file:
         for idx, distance_list in enumerate(distances):

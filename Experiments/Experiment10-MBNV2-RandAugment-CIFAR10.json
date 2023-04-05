@@ -3,7 +3,7 @@
     "Criterion": "nn.CrossEntropyLoss()", 
     "Optimizer": "optim.SGD(hyp_dict[\"Model\"].parameters(), lr = 0.01, momentum = 0.9, weight_decay = 0.001)",
     "Scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"Optimizer\"], milestones = [30,35], gamma = 0.1)",
-    "Dataset": "CIFARDataset",
+    "Dataset": "CIFAR10Dataset",
     "Epochs": "40",
     "Batch Size": "32",
     "Shuffle": "True",

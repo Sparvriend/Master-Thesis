@@ -4,9 +4,9 @@ import random
 import shutil
 
 # Forming file paths for destinations of training, testing and validation data
-TRAIN_DESTINATION = os.path.join("NTZFilterDataset", "data", "train")
-VAL_DESTINATION = os.path.join("NTZFilterDataset", "data", "val")
-TEST_DESTINATION = os.path.join("NTZFilterDataset", "data", "test")
+TRAIN_DESTINATION = os.path.join("NTZFilter", "data", "train")
+VAL_DESTINATION = os.path.join("NTZFilter", "data", "val")
+TEST_DESTINATION = os.path.join("NTZFilter", "data", "test")
 
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION = "NTZ_filter_label_data"
@@ -91,6 +91,17 @@ def split_and_move_CIFAR():
     # Defining amount of data to use for validation
     val_split = 0.2
 
+    # Extracting the data from the zip directories directly results in
+    # the images existing in train/train, so this is checked and corrected
+    if os.path.exists(os.path.join("data", "CIFAR10", "train", "train")):
+        train_path = os.path.join("data", "CIFAR10", "train", "train")
+        files = os.listdir(train_path)
+        for file in files:
+            file_path = os.path.join(train_path, file)
+            destination_path = os.path.join("data", "CIFAR10", "train", file)
+            shutil.move(file_path, destination_path)
+        os.rmdir(train_path)
+
     # Selecting the amount of files to move from the train directory
     train_path = os.path.join("data", "CIFAR10", "train")
     files = os.listdir(train_path)
@@ -123,6 +134,6 @@ def create_dirs():
 
 if __name__ == '__main__':
     # Make sure to run create_dirs() before running split_and_move()
-    create_dirs()
-    split_and_move_NTZ()
+    #create_dirs()
+    #split_and_move_NTZ()
     split_and_move_CIFAR()

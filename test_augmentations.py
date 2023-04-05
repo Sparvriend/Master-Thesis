@@ -8,7 +8,8 @@ import torchvision.transforms as T
 from train import train_model
 from utils import get_categorical_transforms, set_classification_layer, \
                         setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
-                        get_default_transform, get_data_loaders
+                        get_default_transform, get_data_loaders, \
+                        get_num_classes
 
 
 def setup_augmentation_testing():
@@ -44,6 +45,7 @@ def setup_augmentation_testing():
 
     # Replacing the output classification layer with a 4 class version
     set_classification_layer(model)
+    classes = get_num_classes(hyp_dict["Dataset"])
     model.to(device)
 
     # Saving default model, optimizer and scheduler
@@ -56,7 +58,7 @@ def setup_augmentation_testing():
     num_runs = 5
 
     # Defining accuracy metric for multi classification
-    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
+    acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
 
     for augment in augmentation_types:
         if isinstance(augment, T.Lambda):
@@ -74,7 +76,8 @@ def setup_augmentation_testing():
         data_loaders = get_data_loaders(hyp_dict["Batch Size"],
                                         hyp_dict["Shuffle"],
                                         hyp_dict["Num Workers"],
-                                        transform)
+                                        transform,
+                                        hyp_dict["Dataset"])
         
         # Resetting avg accuracy matrix
         acc_list = []
@@ -87,7 +90,7 @@ def setup_augmentation_testing():
 
             # Setting up tensorboard writers
             tensorboard_writers, experiment_path = setup_tensorboard(os.path.join(experiment_folder_name,
-                                                                    ("Run" + str(i) + "-")), "Augmentation-Testing")
+                                                                    ("Run" + str(i))), "Augmentation-Testing")
             setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
             
             # Training model with the current augmentation
@@ -100,7 +103,8 @@ def setup_augmentation_testing():
                                                      hyp_dict["PFM Flag"],
                                                      hyp_dict["Early Limit"],
                                                      hyp_dict["Replacement Limit"],
-                                                     experiment_path)
+                                                     experiment_path,
+                                                     classes)
             acc_list.append(acc_metric(c_labels_pred[0], c_labels[0]).item())
 
             # Closing writers for the iteration

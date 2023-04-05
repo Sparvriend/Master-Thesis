@@ -1,6 +1,8 @@
 import argparse
+import json
 import os
 import sys
+import tensorrt as trt
 import time
 import torch
 from torch.utils.data import DataLoader
@@ -10,7 +12,9 @@ from tqdm import tqdm
 from utils import get_data_loaders, cutoff_date, save_test_predicts, \
                   remove_predicts    
 from explainability import explainability_setup
-import tensorrt as trt
+
+from NTZ_filter_dataset import NTZFilterDataset
+from CIFAR_dataset import CIFAR10Dataset
 
 try:
     from torch2trt import torch2trt
@@ -96,7 +100,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     testing_time = time.time() - test_start
     print("FPS = " + str(round(total_imgs / testing_time, 2)))
     prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths,
-                                                         img_destination)
+                                                         img_destination, data_loader.dataset)
 
     return prediction_list, img_paths_list, input_concat
 
@@ -143,8 +147,13 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     if model.__class__.__name__ == "ShuffleNetV2":
         batch_size = 1
 
+    # Setting the type of dataset for testing
+    experiment_location = os.path.join("Experiments", experiment_name + ".json")
+    with open(experiment_location, "r") as file:
+        dataset = eval(json.load(file)["Dataset"]) 
+
     # Creating the dataset and transferring to a DataLoader
-    test_loader = get_data_loaders(batch_size)["test"]
+    test_loader = get_data_loaders(batch_size, dataset = dataset)["test"]
 
     # Optionally, port the model to TRT version
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)

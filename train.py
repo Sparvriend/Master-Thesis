@@ -12,7 +12,7 @@ from tqdm import tqdm
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
-                  calculate_acc_std 
+                  calculate_acc_std, get_num_classes
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -20,7 +20,7 @@ def train_model(model: torchvision.models, device: torch.device,
                 scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
                 tensorboard_writers: dict, epochs: int, pfm_flag: bool,
                 early_stop_limit: int, model_replacement_limit: int,
-                experiment_path: str) -> tuple[nn.Module, list, list]:
+                experiment_path: str, classes: int) -> tuple[nn.Module, list, list]:
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -42,6 +42,7 @@ def train_model(model: torchvision.models, device: torch.device,
         model_replacement_limit: Number of epochs to wait before
                                  replacing model.
         experiment_path: Path to the experiment folder.
+        classes: Number of classes in the dataset.
     Returns:
         The trained model.
         The combined actual and predicted labels per epoch.
@@ -53,8 +54,8 @@ def train_model(model: torchvision.models, device: torch.device,
     model_replacement = 0
 
     # Setting up performance metrics
-    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
-    f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
+    acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
+    f1_metric = F1Score(task = "multiclass", num_classes = classes).to(device)
 
     for i in range(epochs):
         print("On epoch " + str(i))
@@ -162,7 +163,8 @@ def run_experiment(experiment_name: str):
     data_loaders = get_data_loaders(hyp_dict["Batch Size"], 
                                     hyp_dict["Shuffle"],
                                     hyp_dict["Num Workers"],
-                                    transform)
+                                    transform,
+                                    hyp_dict["Dataset"])
 
     # Setting up tensorboard writers and writing hyperparameters
     tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
@@ -171,7 +173,8 @@ def run_experiment(experiment_name: str):
     # Replacing the output classification layer with a 4 class version
     # And transferring model to device
     model = hyp_dict["Model"]
-    set_classification_layer(model)
+    classes = get_num_classes(hyp_dict["Dataset"])
+    set_classification_layer(model, classes)
     model.to(device)
     
     # Training and saving model
@@ -185,11 +188,12 @@ def run_experiment(experiment_name: str):
                                                  hyp_dict["PFM Flag"],
                                                  hyp_dict["Early Limit"],
                                                  hyp_dict["Replacement Limit"],
-                                                 experiment_path)
+                                                 experiment_path,
+                                                 classes)
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
     # Adding the confusion matrix of the last epoch to the tensorboard
-    add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"])
+    add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"], classes)
 
     # Closing tensorboard writers
     for _, writer in tensorboard_writers.items():

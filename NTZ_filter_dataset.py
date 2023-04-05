@@ -14,7 +14,11 @@ class NTZFilterDataset(Dataset):
         self.img_paths = []
         self.img_labels = []
         self.data_type = os.path.normpath(data_path).split(os.sep)[2]
-        self.transform = transform  
+        self.transform = transform
+        self.label_map = {0: "fail_label_crooked_print",
+                          1: "fail_label_half_printed",
+                          2: "fail_label_not_fully_printed",
+                          3: "no_fail"}	
 
         # Setting the paths for each image and a label if it concerns training
         # or validation data, labels are enumerated over

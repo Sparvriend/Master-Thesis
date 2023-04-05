@@ -4,12 +4,13 @@
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
           -> Think of a method of expressing the distance as uncertainty  
+          -> Look into if KL-Divergence is a better metric than euclidean distance  
+              -> https://pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html  
+              -> https://machinelearningmastery.com/divergence-between-probability-distributions/  
       -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
-* TODO: Implement dataset loading instead of default NTZFilterDataset  
-      -> CIFAR10/100  
-      -> Problem: To load models for prediction on testing data, you need to know the type of dataset,  
-      but that is currently not saved as a result, and it would be odd.  
+* TODO: Implement CIFAR10 dataset
+      -> Fix save_test_predicts not printing the labels onto CIFAR10 dataset images
       -> Form experiments for CIFAR dataset and check if they are good  
       -> Combine CIFAR dataset with uncertainty  
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
@@ -18,23 +19,37 @@
 * TODO: Look into TensorRT library, Ratnajit: Useful in addition to torch2trt?  
       -> (https://github.com/NVIDIA/TensorRT)  
       -> Read about TRT/ONNX why is it faster? (Important to understand theoretically)  
-* TODO: Look into test.py converting to TRT out of memory issues  
-* TODO: Do a rerun of PEP8 in all files  
+* TODO: Look into test.py converting to TRT out of memory issues   
 * TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
       -> other explain_model options should be taken from command line input  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Create synthetic data  
        -> for each class, move the filter across the screen and the label across the filter (where applicable)  
 * TODO: Setup a preliminary function in addition to data_processing, that sets up all directories required:  
-       -> For example all directories in Results, since they are required by other mkdir commands
+       -> Literally all directories required for results/experiments  
+       -> Remove any mkdir and isdir checks in the code afterwards  
 * TODO: Text detection model for fifth label class?  
       -> Problem: Check if the date corresponds to an input date (current date)
       -> Manual labelling of each date on the filter  
-      -> East Detector  
+      -> East Detector 
+* OPTIONAL: Do a rerun of PEP8 in all files 
+* OPTIONAL: Make a jupyter notebook implementation of some of the code, so that is can easily be shown off to others  
+* OPTIONAL: Use 3D plots with color to represent results     
+* OPTIONAL: Test all code with laptop to see if it works without CUDA  
 
 ### Tensorboard tip
 
 To open tensorboard in browser, run the following command in a new terminal: tensorboard --logdir=Master-Thesis-Experiments
+
+
+### Class definition for the NTZFilterDataset
+
+    The class labels are defined as:
+    0: fail_label_crooked_print
+    1: fail_label_half_printed
+    2: fail_label_not_fully_printed
+    3: no_fail
+    4: fail_label_date (Not yet incorporated)
 
 ## JSON configuration files
 

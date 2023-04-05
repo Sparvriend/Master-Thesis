@@ -22,9 +22,11 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
                                efficientnet_b1, EfficientNet_B1_Weights
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
 
 from NTZ_filter_dataset import NTZFilterDataset
+from CIFAR_dataset import CIFAR10Dataset
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
@@ -77,26 +79,24 @@ def flatten_list(list: list) -> list:
 
 
 def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
-                         tensorboard_writer: SummaryWriter):
+                         tensorboard_writer: SummaryWriter, classes: int):
     """Function that adds a confusion matrix to the tensorboard.
     Only saved for the last epoch to the hyperparameter writer.
-    The class labels are defined as:
-    0: fail_label_crooked_print
-    1: fail_label_half_printed
-    2: fail_label_not_fully_printed
-    3: no_fail
 
     Args:
         conf_mat: Confusion matrix as a torch tensor.
         tensorboard_writer: hyperparameter writer.
     """
     # Creating confusion matrix from predictions and actual
-    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = 4)
+    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = classes)
     combined_labels = convert_to_list(combined_labels)
     combined_labels_pred = convert_to_list(combined_labels_pred)
     conf_mat = conf_matrix(torch.tensor(combined_labels_pred),
                            torch.tensor(combined_labels))
-    classes = ["Crooked print", "Half print", "Not full print", "No fail"]   
+    if classes == 4:
+        classes = ["Crooked print", "Half print", "Not full print", "No fail"]
+    else:
+        classes = list(range(classes))   
 
     # Plot confusion matrix
     fig, ax = plt.subplots()
@@ -180,15 +180,35 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     file.close()
 
 
-def set_classification_layer(model: torchvision.models):
+def get_num_classes(dataset: Dataset) -> int:
+    """Function that returns the amount of classes for each dataset
+    that is compatible with the code.
+
+    Args:
+        dataset: The dataset the inquiry is made for.
+
+    Returns:
+        The number of classes in the classification layer of the model.
+    """
+    if dataset == NTZFilterDataset:
+        classes = 4
+    elif dataset == CIFAR10Dataset:
+        classes = 10
+
+    return classes
+
+
+def set_classification_layer(model: torchvision.models, classes: int):
     """This function changes the final classification layer
-    from a PyTorch deep learning model to a four output classes version.
-    The function edits the model variable, so no need to return it.
+    from a PyTorch deep learning model to a X output classes version,
+    depending on the datase. The function edits the model variable,
+    so no need to return it.
 
     Args: 
-        model: This is a default model, with many more classes than 4.
+        model: This is a default model, with usually a lot more output classes.
     """
-    classes = 4
+
+    # Setting the classification layer
     if model.__class__.__name__ == "MobileNetV2" or \
        model.__class__.__name__ == "EfficientNet":
         model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
@@ -275,7 +295,8 @@ def remove_predicts(path):
         os.mkdir(path)
 
 
-def save_test_predicts(predicted_labels: list, paths: list, img_destination: str):
+def save_test_predicts(predicted_labels: list, paths: list,
+                       img_destination: str, dataset: Dataset):
     """Function that converts labels to a list and then saves paths and labels
     to appropriate prediction directories. The prediction directory in
     img_destination, should already exist, when running remove_predicts
@@ -285,6 +306,7 @@ def save_test_predicts(predicted_labels: list, paths: list, img_destination: str
         predicted_labels: list of tensors with predicted labels.
         paths: list of lists with paths (strings) to images.
         img_destination: Designated folder to save images to.
+        dataset: The dataset the predictions are made for.
     
     Returns:
         Prediction list and paths converted to correct format
@@ -295,9 +317,8 @@ def save_test_predicts(predicted_labels: list, paths: list, img_destination: str
         predicted_labels = convert_to_list(predicted_labels)
     paths = flatten_list(paths)
 
-    # Dictionary for the labels to use in saving
-    label_dict = {0: "fail_label_crooked_print", 1: "fail_label_half_printed",
-                  2: "fail_label_not_fully_printed", 3: "no_fail"}	
+    # Getting the dataset label map
+    label_dict = dataset.label_map
 
     # Loading necessary information and then drawing on the label on each image.
     for idx, path in enumerate(paths):
@@ -322,9 +343,8 @@ def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWr
     Returns:
         List of tensorboard writers.
     """
-    
     current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
-    experiment_path = os.path.join("Results", folder, (experiment_name + current_time)) 
+    experiment_path = os.path.join("Results", folder, (experiment_name + "-" + current_time)) 
     train_dir = os.path.join(experiment_path, "train")
     val_dir = os.path.join(experiment_path, "val")
     hyp_dir = os.path.join(experiment_path, "hyp")
@@ -446,7 +466,7 @@ def cutoff_date(folder_name: str):
     Args:
         folder_name: Name of the folder.
     """
-    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-16]
+    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-17]
 
 
 def plot_results(path: str, title: str):
@@ -603,7 +623,8 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
 
 
 def get_data_loaders(batch_size: int = 32, shuffle: bool = True, 
-                     num_workers: int = 4, transform: T.Compose = get_transforms()):
+                     num_workers: int = 4, transform: T.Compose = get_transforms(),
+                     dataset: Dataset = NTZFilterDataset):
     """Function that creates the data loaders for the training, validation
     and testing. The train set is also augmented, while the validation and
     testing sets are not.
@@ -617,19 +638,22 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
     Returns:
         Dictionary with the data loaders for training, validation and testing.
     """
+    # Setting the dataset type
+    dataset_path = os.path.join("data", dataset.__name__.removesuffix("Dataset"))
+
     # File paths
-    train_path = os.path.join("data", "NTZFilterDataset", "train")
-    val_path = os.path.join("data", "NTZFilterDataset", "val")
-    test_path = os.path.join("data", "NTZFilterDataset", "test")
+    train_path = os.path.join(dataset_path, "train")
+    val_path = os.path.join(dataset_path, "val")
+    test_path = os.path.join(dataset_path, "test")
 
     # Getting default transform
     default_transform = get_default_transform()
 
     # Creating datasets for training/validation/testing
     # based on NTZFilterDataset class.
-    train_data = NTZFilterDataset(train_path, transform)
-    val_data = NTZFilterDataset(val_path, default_transform)
-    test_data = NTZFilterDataset(test_path, default_transform)
+    train_data = dataset(train_path, transform)
+    val_data = dataset(val_path, default_transform)
+    test_data = dataset(test_path, default_transform)
 
     # Creating data loaders for training and validation
     train_loader = DataLoader(train_data, batch_size = batch_size,
