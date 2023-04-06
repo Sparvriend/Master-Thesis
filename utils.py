@@ -79,26 +79,27 @@ def flatten_list(list: list) -> list:
 
 
 def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
-                         tensorboard_writer: SummaryWriter, classes: int):
+                         tensorboard_writer: SummaryWriter, label_map: dict):
     """Function that adds a confusion matrix to the tensorboard.
     Only saved for the last epoch to the hyperparameter writer.
 
     Args:
-        conf_mat: Confusion matrix as a torch tensor.
+        combined_labels: List of all true labels.
+        combined_labels_pred: List of all predicted labels.
         tensorboard_writer: hyperparameter writer.
+        label_map: Dictionary that maps the labels to the correct names.
     """
+    # Retrieving class names
+    classes = list(label_map.values())
+
     # Creating confusion matrix from predictions and actual
-    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = classes)
+    conf_matrix = ConfusionMatrix(task = "multiclass", num_classes = len(classes))
     combined_labels = convert_to_list(combined_labels)
     combined_labels_pred = convert_to_list(combined_labels_pred)
     conf_mat = conf_matrix(torch.tensor(combined_labels_pred),
                            torch.tensor(combined_labels))
-    if classes == 4:
-        classes = ["Crooked print", "Half print", "Not full print", "No fail"]
-    else:
-        classes = list(range(classes))   
-
-    # Plot confusion matrix
+    
+    # Plotting confusion matrix
     fig, ax = plt.subplots()
     im = ax.imshow(conf_mat, cmap='Blues')
 
@@ -108,11 +109,13 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
     ax.set_xticklabels(classes)
     ax.set_yticklabels(classes)
 
-    # Add colorbar and title
+    # Add colorbar and title, make x labels smaller,
+    # because they otherwise overlap
     ax.figure.colorbar(im, ax=ax)
     ax.set_title("Confusion Matrix")
     plt.xlabel("Predicted Label")
     plt.ylabel("True Label")
+    plt.xticks(fontsize = 6)
 
     # Adding text for each datapoint
     for i in range(len(classes)):
@@ -320,6 +323,13 @@ def save_test_predicts(predicted_labels: list, paths: list,
     # Getting the dataset label map
     label_dict = dataset.label_map
 
+    if dataset == NTZFilterDataset:
+        text_loc = (50, 10)
+        text_size = 18
+    else:
+        text_loc = (0, 0)
+        text_size = 6
+
     # Loading necessary information and then drawing on the label on each image.
     for idx, path in enumerate(paths):
         name = os.path.normpath(path).split(os.sep)[-1]
@@ -327,9 +337,9 @@ def save_test_predicts(predicted_labels: list, paths: list,
         label_name = label_dict[predicted_labels[idx]]
 
         # Drawing the label and saving the image
-        font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = 18)
+        font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
         draw = ImageDraw.Draw(img)
-        draw.text((50, 10), label_name, font = font, fill = (255, 0, 0))
+        draw.text(text_loc, label_name, font = font, fill = (255, 0, 0))
         img.save(os.path.join(img_destination, name))
 
     return predicted_labels, paths

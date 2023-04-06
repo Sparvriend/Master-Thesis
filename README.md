@@ -1,6 +1,14 @@
 # Master-Thesis-Code-Repository
 
-## Current TODO
+## TODO in order of priority
+* TODO: Create synthetic data  
+       -> for each class, move the filter across the screen and the label across the filter (where applicable)  
+       -> Possibility: GANs  
+       -> Possibility: Blender  
+       -> Possibility: Diffusion models  
+* TODO: Implement tinyImageNet dataset  
+      -> Form experiments to look at uncertainty  
+      -> Form experiments for model comparison  
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
           -> Think of a method of expressing the distance as uncertainty  
@@ -9,10 +17,10 @@
               -> https://machinelearningmastery.com/divergence-between-probability-distributions/  
       -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
-* TODO: Implement CIFAR10 dataset
-      -> Fix save_test_predicts not printing the labels onto CIFAR10 dataset images
-      -> Form experiments for CIFAR dataset and check if they are good  
-      -> Combine CIFAR dataset with uncertainty  
+      -> Convert Saliency Map to RGB  
+* TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
+* TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
+      -> other explain_model options should be taken from command line input           
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
       -> Appears to be as fast as doing it on the CPU? (is device CPU?)  
@@ -20,18 +28,13 @@
       -> (https://github.com/NVIDIA/TensorRT)  
       -> Read about TRT/ONNX why is it faster? (Important to understand theoretically)  
 * TODO: Look into test.py converting to TRT out of memory issues   
-* TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
-      -> other explain_model options should be taken from command line input  
-* TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
-* TODO: Create synthetic data  
-       -> for each class, move the filter across the screen and the label across the filter (where applicable)  
-* TODO: Setup a preliminary function in addition to data_processing, that sets up all directories required:  
-       -> Literally all directories required for results/experiments  
-       -> Remove any mkdir and isdir checks in the code afterwards  
 * TODO: Text detection model for fifth label class?  
-      -> Problem: Check if the date corresponds to an input date (current date)
+      -> Problem: Check if the date corresponds to an input date (current date)  
       -> Manual labelling of each date on the filter  
-      -> East Detector 
+      -> East Detector  
+      -> Do a short visibility study if it turns out to be too complicated  
+
+## Optional TODOs
 * OPTIONAL: Do a rerun of PEP8 in all files 
 * OPTIONAL: Make a jupyter notebook implementation of some of the code, so that is can easily be shown off to others  
 * OPTIONAL: Use 3D plots with color to represent results     
@@ -70,6 +73,10 @@ The JSON configuration files are used to run experiments with different hyperpar
 
 ## Code explanation
 
+### data_processing.py
+
+data_processing.py can be used to get data from a folder called "NTZ_filter_label_data" and divides it up into classes with training, validation and testing data. It is also used to setup the CIFAR10 dataset and it contains a function that creates all required directories for results saving. If an error occurs due to a directory missing, then it is likely that create_dirs() has not been run
+
 ### train.py
 
 train.py can be used to train a model. It can take three types of inputs as command line arguments. The first method is to give a JSON experiment configuration file, from the Master-Thesis-Experiments folder, it is not necessary to combine the path, e.g. Experiments/*.json. The second method is to not give it a JSON experiment configuration file, e.g. giving it no arguments. In doing so all JSON files for training will be selected and used for experimenting three times. The third method is to give it a JSON experiment configuration file, like in method 1, but to follow it by an integer, which is the amount of times the experiment will be run.
@@ -81,7 +88,3 @@ test.py can be used to test a model. It takes one type of input: an experiment f
 ### test_augmentation.py
 
 test_augmentation.py can be used to get performance results for each augmentation method used for training the models, one by one. It does not take inputs, and takes about 1 hour and a half to run on a RTX 3080. It creates directories for each augmentation type and prints a results.txt file in each directory with an averaged accuracy result per augmentation type.
-
-### data_processing.py
-
-data_processing.py can be used to get data from a folder called "NTZ_filter_label_data" and divides it up into classes with training, validation and testing data.

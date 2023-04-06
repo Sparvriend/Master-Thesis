@@ -82,10 +82,6 @@ def explainability_setup(model: torchvision.models, img_paths: list, option: str
         predicted_labels: list of predicted labels.
         experiment_folder: path to the experiment folder that was tested on.
     """
-    # Setting up the explainability results folder
-    if not os.path.exists(os.path.join("Results", "Explainability-Results")):
-        os.mkdir(os.path.join("Results", "Explainability-Results"))
-
     # Getting experiment_name and creating the folder to paste the images in
     experiment_name = cutoff_date(experiment_folder)
     img_desintation = os.path.join("Results", "Explainability-Results", experiment_name)

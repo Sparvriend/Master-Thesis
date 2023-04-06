@@ -170,13 +170,16 @@ def run_experiment(experiment_name: str):
     tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
-    # Replacing the output classification layer with a 4 class version
+    # Replacing the output classification layer with a N class version
     # And transferring model to device
     model = hyp_dict["Model"]
     classes = get_num_classes(hyp_dict["Dataset"])
     set_classification_layer(model, classes)
     model.to(device)
     
+    # Recording total training time
+    training_start = time.time()
+
     # Training and saving model
     model, c_labels, c_labels_pred = train_model(model, device, 
                                                  hyp_dict["Criterion"],
@@ -190,10 +193,15 @@ def run_experiment(experiment_name: str):
                                                  hyp_dict["Replacement Limit"],
                                                  experiment_path,
                                                  classes)
+    
+    elapsed_time = time.time() - training_start
+    print("Total training time (H/M/S) = ", 
+          time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
     torch.save(model, os.path.join(experiment_path, "model.pth"))
 
     # Adding the confusion matrix of the last epoch to the tensorboard
-    add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"], classes)
+    add_confusion_matrix(c_labels, c_labels_pred, tensorboard_writers["hyp"],
+                         data_loaders["train"].dataset.label_map)
 
     # Closing tensorboard writers
     for _, writer in tensorboard_writers.items():

@@ -167,7 +167,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Optionally, explain the model using integrated gradients
     if explain_model:
-        explainability_setup(model, img_paths, "integrated_gradients", device,
+        explainability_setup(model, img_paths, "guided_backpropagation", device,
                              input_concat, predicted_labels, experiment_folder)
 
 if __name__ == '__main__':

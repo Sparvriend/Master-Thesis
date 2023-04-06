@@ -120,16 +120,25 @@ def split_and_move_CIFAR():
 
 
 def create_dirs():
-    """Function that creates the directories for training, testing and
-    validation data and the classes within those directories.
-    It also creates an augmentation directory.
+    """Function that creates all directories required for running modules
+    of the project. It is assumed that the folder NTZ_filter_label_data
+    is already available and is ordered correctly. 
     """
+    # Creating some directories for setting up the NTZFilter dataset.
     for destination_type in [TRAIN_DESTINATION, VAL_DESTINATION, 
                              TEST_DESTINATION]:
         for data_class in DATA_CLASSES:
             path = os.path.join(destination_type, data_class)
             if not os.path.exists(path):
                 os.makedirs(path)
+    
+    # Creating all directories needed in Results/
+    dirs = ["Augmentaton-Testing", "Experiment-Results",
+            "Explainability-Results", "Test-Predictions"]
+    for dir in dirs:
+        path = os.path.join("Results", dir)
+        if not os.path.exists(path):
+            os.mkdir(path)
 
 
 if __name__ == '__main__':

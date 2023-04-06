@@ -25,14 +25,11 @@ def setup_augmentation_testing():
     # Checking if the augmentation testing path exists
     # If not create it, if it does, remove the results from the previous run
     path = os.path.join("Results", "Augmentation-Testing")
-    if not os.path.exists(path):
-        os.mkdir(path)
-    else:
-        for file in os.listdir(path):
-            if os.path.isfile(os.path.join(path, file)):
-                os.remove(os.path.join(path, file))
-            else:
-                shutil.rmtree(os.path.join(path, file))
+    for file in os.listdir(path):
+        if os.path.isfile(os.path.join(path, file)):
+            os.remove(os.path.join(path, file))
+        else:
+            shutil.rmtree(os.path.join(path, file))
 
     # Defining experiment name and retrieving hyperparameter dictionary
     experiment_name = "TestAugments"
