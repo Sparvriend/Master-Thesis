@@ -6,12 +6,17 @@
        -> Possibility: GANs  
        -> Possibility: Blender  
        -> Possibility: Diffusion models  
-* TODO: Implement tinyImageNet dataset  
-      -> Form experiments to look at uncertainty  
-      -> Form experiments for model comparison  
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
           -> Think of a method of expressing the distance as uncertainty  
+                -> Other option: Define a model, define a RBF function and replace each Relu layer in the network with a rbf layer.
+                Information on how to replace all relu layers in the network by some other activation layer can be found here:
+                https://discuss.pytorch.org/t/how-to-replace-all-relu-activations-in-a-pretrained-network/31591/11
+                -> Create a function that takes a model as input, as well as a list of or single layer to replace in the model
+                and what to create it by. The function should then replace the layers in the model with the new layers.
+                This way any of the models that have been used so far can be used with DUQ. -> Place the RBF conversion function in explainability.py in the DUQ function.
+                -> It seems as if Matias in his email is saying that only the final Relu layer needs replacing, which is a much easier option.
+                -> Only use the RBF function in the network during interference time
           -> Look into if KL-Divergence is a better metric than euclidean distance  
               -> https://pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html  
               -> https://machinelearningmastery.com/divergence-between-probability-distributions/  

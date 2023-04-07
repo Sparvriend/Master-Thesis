@@ -25,8 +25,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
 
-from NTZ_filter_dataset import NTZFilterDataset
-from CIFAR_dataset import CIFAR10Dataset
+from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
@@ -101,7 +100,7 @@ def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
     
     # Plotting confusion matrix
     fig, ax = plt.subplots()
-    im = ax.imshow(conf_mat, cmap='Blues')
+    im = ax.imshow(conf_mat, cmap = "Blues")
 
     # Setting x-axis and y-axis labels
     ax.set_xticks(np.arange(len(classes)))
@@ -181,24 +180,6 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
         file.write("FPS = " + str(round(total_imgs / elapsed_time, 2)) + "\n")
         file.write("\n")
     file.close()
-
-
-def get_num_classes(dataset: Dataset) -> int:
-    """Function that returns the amount of classes for each dataset
-    that is compatible with the code.
-
-    Args:
-        dataset: The dataset the inquiry is made for.
-
-    Returns:
-        The number of classes in the classification layer of the model.
-    """
-    if dataset == NTZFilterDataset:
-        classes = 4
-    elif dataset == CIFAR10Dataset:
-        classes = 10
-
-    return classes
 
 
 def set_classification_layer(model: torchvision.models, classes: int):
@@ -339,7 +320,7 @@ def save_test_predicts(predicted_labels: list, paths: list,
         # Drawing the label and saving the image
         font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
         draw = ImageDraw.Draw(img)
-        draw.text(text_loc, label_name, font = font, fill = (255, 0, 0))
+        draw.text(text_loc, label_name, font = font, fill = 255)
         img.save(os.path.join(img_destination, name))
 
     return predicted_labels, paths
@@ -451,7 +432,7 @@ def calculate_acc_std(experiment_list: list, path: str):
         files = os.listdir(os.path.join(path, experiment))
         for file in files:
             res_path = os.path.join(path, experiment, file, "results.txt")
-            with open(res_path, 'r') as res_txt:
+            with open(res_path, "r") as res_txt:
                 # Read all the lines into a list
                 lines = res_txt.readlines()
 

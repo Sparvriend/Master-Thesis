@@ -12,7 +12,7 @@ from tqdm import tqdm
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
-                  calculate_acc_std, get_num_classes
+                  calculate_acc_std
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -173,7 +173,7 @@ def run_experiment(experiment_name: str):
     # Replacing the output classification layer with a N class version
     # And transferring model to device
     model = hyp_dict["Model"]
-    classes = get_num_classes(hyp_dict["Dataset"])
+    classes = data_loaders["train"].dataset.n_classes
     set_classification_layer(model, classes)
     model.to(device)
     

@@ -13,8 +13,7 @@ from utils import get_data_loaders, cutoff_date, save_test_predicts, \
                   remove_predicts    
 from explainability import explainability_setup
 
-from NTZ_filter_dataset import NTZFilterDataset
-from CIFAR_dataset import CIFAR10Dataset
+from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
 try:
     from torch2trt import torch2trt
@@ -166,7 +165,13 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
                                                            img_destination)
 
     # Optionally, explain the model using integrated gradients
+    # Reduce the amount of images to explain, since doing it with too many
+    # Causes CUDA out of memory errors
     if explain_model:
+        if len(img_paths) > 100:
+            img_paths = img_paths[:100]
+            input_concat = input_concat[:100]
+            predicted_labels = predicted_labels[:100]
         explainability_setup(model, img_paths, "guided_backpropagation", device,
                              input_concat, predicted_labels, experiment_folder)
 

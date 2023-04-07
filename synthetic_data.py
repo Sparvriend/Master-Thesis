@@ -31,7 +31,7 @@ def segment_slic(im):
     im_segments = slic(im, n_segments = 7, compactness = 10)
     
     # Saving the image with all clusters overlayed
-    save = label2rgb(im_segments, im, kind = 'overlay')
+    save = label2rgb(im_segments, im, kind = "overlay")
     im = Image.fromarray(np.uint8(save*255))
     im.save("example_segmented.jpg")
 

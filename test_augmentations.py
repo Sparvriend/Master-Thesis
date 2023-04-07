@@ -8,8 +8,7 @@ import torchvision.transforms as T
 from train import train_model
 from utils import get_categorical_transforms, set_classification_layer, \
                         setup_tensorboard, setup_hyp_file, setup_hyp_dict, \
-                        get_default_transform, get_data_loaders, \
-                        get_num_classes
+                        get_default_transform, get_data_loaders
 
 
 def setup_augmentation_testing():
@@ -42,7 +41,6 @@ def setup_augmentation_testing():
 
     # Replacing the output classification layer with a 4 class version
     set_classification_layer(model)
-    classes = get_num_classes(hyp_dict["Dataset"])
     model.to(device)
 
     # Saving default model, optimizer and scheduler
@@ -53,9 +51,6 @@ def setup_augmentation_testing():
     # Getting all augmentations and defining a number of runs to average over
     augmentation_types, _ = get_categorical_transforms()
     num_runs = 5
-
-    # Defining accuracy metric for multi classification
-    acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
 
     for augment in augmentation_types:
         if isinstance(augment, T.Lambda):
@@ -75,6 +70,10 @@ def setup_augmentation_testing():
                                         hyp_dict["Num Workers"],
                                         transform,
                                         hyp_dict["Dataset"])
+        
+        # Defining accuracy metric for multi classification
+        classes = data_loaders["train"].dataset.n_classes
+        acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
         
         # Resetting avg accuracy matrix
         acc_list = []

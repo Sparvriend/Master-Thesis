@@ -15,11 +15,9 @@ from tqdm import tqdm
 import warnings
 
 from utils import cutoff_date, flatten_list, get_data_loaders, \
-                  save_test_predicts, remove_predicts, cutoff_classification_layer, \
-                  get_num_classes
+                  save_test_predicts, remove_predicts, cutoff_classification_layer
 
-from NTZ_filter_dataset import NTZFilterDataset
-from CIFAR_dataset import CIFAR10Dataset
+from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
@@ -40,9 +38,9 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
 
     # Creating custom colormaps
     bw_cmap = LinearSegmentedColormap.from_list("custom bw",
-                                                [(0, '#ffffff'),
-                                                 (0.25, '#000000'),
-                                                 (1, '#000000')],
+                                                [(0, "#ffffff"),
+                                                 (0.25, "#000000"),
+                                                 (1, "#000000")],
                                                 N = 256)
     
     # Iterating over all image data and saving 
@@ -155,6 +153,9 @@ def compare_feature_maps(feature_map: torch.Tensor, class_centroids: dict,
     """
     centroid_dist = []
     for _, class_centroid in class_centroids.items():
+        # Failsafe for if a class centroid does not exist
+        if class_centroid == []:
+            continue
         # Convert to cpu, since that is what numpy requires
         feature_map = feature_map.cpu()
         class_centroid = class_centroid.cpu()
@@ -193,7 +194,7 @@ def deep_uncertainty_quantification(experiment_name: str):
         dataset = eval(json.load(file)["Dataset"])
 
     # Setting the amount of classes
-    classes = get_num_classes(dataset) 
+    classes = dataset.n_classes
 
     # Retrieving data loaders based on dataset type
     data_loaders = get_data_loaders(batch_size, dataset = dataset)
@@ -236,6 +237,10 @@ def deep_uncertainty_quantification(experiment_name: str):
 
     # Calculating average feature maps for the predictions
     for c_label, feature_maps in class_dict.items():
+        # Failsafe for if a class is not present in the validation set
+        # Which can happen with many class datasets, such as tinyImageNet
+        if feature_maps == []:
+            continue
         summed_feature_maps = torch.zeros(feature_maps[0].shape).to(device)
         for feature_map in feature_maps:
             summed_feature_maps += feature_map
@@ -279,7 +284,8 @@ def deep_uncertainty_quantification(experiment_name: str):
     with open(os.path.join(img_destination, "results.txt"), "a") as file:
         for idx, distance_list in enumerate(distances):
             uncertainty = 1 - (min(distance_list) / max_distance)
-            file.write("distance list = " + str(distance_list) + "\n")
+            file.write("Distance list = " + str(distance_list) + "\n")
+            file.write("N classes compared to = " + str(len(distance_list)) + "\n")
             file.write("Image = " + img_paths[idx] + "\n")
             file.write("Predicted label = " + str(predicted_labels[idx]) + "\n")
             file.write("Uncertainty = " + str(uncertainty) + "\n\n")
