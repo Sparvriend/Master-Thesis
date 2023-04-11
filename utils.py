@@ -51,6 +51,31 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
+class RBF(nn.Module):
+    """RBF layer definition taken from
+    https://github.com/JeremyLinux/PyTorch-Radial-Basis-Function-Layer/blob/master/Torch%20RBF/torch_rbf.py
+    """
+    def __init__(self, in_features, out_features):
+        super(RBF, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.centres = nn.Parameter(torch.Tensor(out_features, in_features))
+        self.log_sigmas = nn.Parameter(torch.Tensor(out_features))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.centres, 0, 1)
+        nn.init.constant_(self.log_sigmas, 0)
+
+    def forward(self, input):
+        size = (input.size(0), self.out_features, self.in_features)
+        x = input.unsqueeze(1).expand(size)
+        c = self.centres.unsqueeze(0).expand(size)
+        distances = (x - c).pow(2).sum(-1).pow(0.5) / torch.exp(self.log_sigmas).unsqueeze(0)
+        # With Gaussian
+        return torch.exp(-1*distances.pow(2))
+        
+
 def convert_to_list(labels: list) -> list:
     """Function that converts a list of tensors to a list of lists.
 
@@ -191,7 +216,6 @@ def set_classification_layer(model: torchvision.models, classes: int):
     Args: 
         model: This is a default model, with usually a lot more output classes.
     """
-
     # Setting the classification layer
     if model.__class__.__name__ == "MobileNetV2" or \
        model.__class__.__name__ == "EfficientNet":

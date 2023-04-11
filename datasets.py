@@ -28,6 +28,10 @@ class ProjDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[str, torch.Tensor, int]:
         path = self.img_paths[idx]
         raw_image = Image.open(path)
+        # Converting to RGB if image is grayscale, tinyImageNet has grayscale images
+        if raw_image.mode == "L":
+            raw_image = raw_image.convert("RGB")
+
         # Transforming the image, it is augmented if from the training dataset
         image = self.transform(raw_image)
         if self.data_type == "train" or self.data_type == "val":
@@ -150,19 +154,3 @@ class TinyImageNet200Dataset(ProjDataset):
 
         # Swapping the label map
         self.label_map = {v: k for k, v in self.label_map.items()}
-
-    # Overriding the getitem function, since tinyImageNet contains
-    # Image that are greyscale, and they need to be transformed to RGB first
-    def __getitem__(self, idx: int) -> tuple[str, torch.Tensor, int]:
-        path = self.img_paths[idx]
-        raw_image = Image.open(path)
-        if raw_image.mode == "L":
-            raw_image = raw_image.convert("RGB")
-        # Transforming the image, it is augmented if from the training dataset
-        image = self.transform(raw_image)
-        if self.data_type == "train" or self.data_type == "val":
-            # Saving the label if it exists.
-            label = self.img_labels[idx]
-        else:
-            label = None
-        return path, image, label

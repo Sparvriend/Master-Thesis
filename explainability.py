@@ -7,15 +7,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from PIL import Image
-import sys
 import torch
 import torchvision.models
 import torchvision.transforms as T
 from tqdm import tqdm
 import warnings
 
+# Temproary imports for RBF DUQ
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+from torchmetrics import Accuracy, F1Score
+from torch import nn, optim
+
 from utils import cutoff_date, flatten_list, get_data_loaders, \
-                  save_test_predicts, remove_predicts, cutoff_classification_layer
+                  save_test_predicts, remove_predicts, cutoff_classification_layer, \
+                  RBF
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
@@ -297,9 +302,86 @@ def deep_ensemble_uncertainty():
    # Testing module, but can not import test_model due to circular imports
     print("Not yet implemented")
 
+
+def rbf_uncertainty():
+    # Setting up the device to run the model on
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device: " + str(device))
+
+    # Setting batch size
+    batch_size = 32
+
+    # Loading model and defining experiment name
+    model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
+    model.classifier[1] = RBF(1280, 4)
+    model.to(device)
+
+    #summary(model, (3, 224, 224))
+    #print(model)
+
+    data_loaders = get_data_loaders()
+    
+    # Inference loop:
+    # model.eval()
+    # with torch.no_grad():
+    #     for inputs, labels in tqdm(data_loaders["train"]):
+    #         inputs = inputs.to(device)
+    #         model_output = model(inputs)
+    #         predicted_labels = model_output.argmax(dim=1)
+    #         print(predicted_labels)
+
+    optimizer = optim.SGD(model.parameters(), lr = 0.001, momentum = 0.9, weight_decay = 0.001)
+    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
+    f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
+    criterion = nn.CrossEntropyLoss()
+
+    # Training loop:
+    for _ in range(30):
+        for phase in ["train", "val"]:
+            if phase == "train":
+                model.train()
+                print("Training phase")
+            else:
+                model.eval()
+                print("Validation phase")
+            
+            # Set model metrics to 0 and starting model timer
+            loss_over_epoch = 0
+            acc = 0
+            f1_score = 0
+            total_imgs = 0
+            combined_labels = []
+            combined_labels_pred = []
+            for inputs, labels in tqdm(data_loaders[phase]):
+                with torch.set_grad_enabled(phase == "train"):
+                    inputs = inputs.to(device)
+                    labels = labels.to(device)
+                    optimizer.zero_grad()
+                    model_output = model(inputs)
+                    predicted_labels = model_output.argmax(dim=1)
+                    loss = criterion(model_output, labels)
+                    acc += acc_metric(predicted_labels, labels).item()
+                    f1_score += f1_metric(predicted_labels, labels).item()
+                    if phase == "train":
+                        loss.backward()
+                        optimizer.step()
+                    loss_over_epoch += loss.item()
+                    total_imgs += len(inputs)
+                    combined_labels.append(labels)
+                    combined_labels_pred.append(predicted_labels)
+
+        mean_accuracy = (acc / total_imgs)
+        mean_f1_score = (f1_score / total_imgs)
+        print("Loss = " + str(round(loss_over_epoch, 2)))
+        print("Accuracy = " + str(round(mean_accuracy, 2)))
+        print("F1 score = " + str(round(mean_f1_score, 2)))
+
+
 if __name__ == '__main__':
     # Running DUQ on a model that has been through training phase
-    if len(sys.argv) == 2 and os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
-        deep_uncertainty_quantification(sys.argv[1])
-    else:
-        print("No valid experiment name given, exiting ...")
+    # if len(sys.argv) == 2 and os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
+    #     deep_uncertainty_quantification(sys.argv[1])
+    # else:
+    #     print("No valid experiment name given, exiting ...")
+
+    rbf_uncertainty()
