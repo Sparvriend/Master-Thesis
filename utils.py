@@ -72,8 +72,12 @@ class RBF(nn.Module):
         x = input.unsqueeze(1).expand(size)
         c = self.centres.unsqueeze(0).expand(size)
         distances = (x - c).pow(2).sum(-1).pow(0.5) / torch.exp(self.log_sigmas).unsqueeze(0)
+        # Normalizing distances, since they are too large to use for a gaussian distribution
+        mean_distances = distances.mean()
+        std_distances = distances.std()
+        distances = (distances - mean_distances) / std_distances
         # With Gaussian
-        return torch.exp(-1*distances.pow(2))
+        return torch.exp(-1 * distances.pow(2))
         
 
 def convert_to_list(labels: list) -> list:

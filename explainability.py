@@ -20,7 +20,7 @@ from torch import nn, optim
 
 from utils import cutoff_date, flatten_list, get_data_loaders, \
                   save_test_predicts, remove_predicts, cutoff_classification_layer, \
-                  RBF
+                  RBF, get_transforms
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
@@ -315,11 +315,10 @@ def rbf_uncertainty():
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
     model.classifier[1] = RBF(1280, 4)
     model.to(device)
-
     #summary(model, (3, 224, 224))
     #print(model)
 
-    data_loaders = get_data_loaders()
+    data_loaders = get_data_loaders(transform = get_transforms("no_augment"))
     
     # Inference loop:
     # model.eval()
@@ -331,12 +330,14 @@ def rbf_uncertainty():
     #         print(predicted_labels)
 
     optimizer = optim.SGD(model.parameters(), lr = 0.001, momentum = 0.9, weight_decay = 0.001)
+    #optimizer = optim.Adam(model.parameters(), lr = 0.001, weight_decay = 0.001)
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
     f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
     criterion = nn.CrossEntropyLoss()
+    #criterion = nn.BCEWithLogitsLoss()
 
     # Training loop:
-    for _ in range(30):
+    for i in range(300):
         for phase in ["train", "val"]:
             if phase == "train":
                 model.train()
@@ -358,23 +359,54 @@ def rbf_uncertainty():
                     labels = labels.to(device)
                     optimizer.zero_grad()
                     model_output = model(inputs)
-                    predicted_labels = model_output.argmax(dim=1)
+                    predicted_labels = model_output.argmax(dim = 1)
+                    
+                    _, predicted = torch.max(model_output.data, 1)
+                    one_hot_predicted_labels = torch.zeros(model_output.size(), requires_grad = True).to(device)
+                    one_hot_predicted_labels = one_hot_predicted_labels.scatter_(1, predicted.view(-1, 1), 1)
+
+                    one_hot_labels = torch.nn.functional.one_hot(labels, 4)
+
+                    #print(one_hot_predicted_labels)
+                    #print(one_hot_labels)
+                    #exit()
                     loss = criterion(model_output, labels)
+                    #loss = criterion(one_hot_predicted_labels, one_hot_labels.float())
                     acc += acc_metric(predicted_labels, labels).item()
                     f1_score += f1_metric(predicted_labels, labels).item()
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
+
+                    # model_parameters = list(model.parameters())
+                    # for model_parameter in model_parameters:
+                    #     print(model_parameter.requires_grad)
+                    #     print(model_parameter.grad)
+                    #     if model_parameter.is_leaf == False:
+                    #         print("model_param is not a leaf")
+                    #     print("=============================")
+                    #exit()
+
+                    #print(list(model.parameters())[0].grad)
                     loss_over_epoch += loss.item()
+                    #print(loss_over_epoch)
                     total_imgs += len(inputs)
                     combined_labels.append(labels)
                     combined_labels_pred.append(predicted_labels)
-
-        mean_accuracy = (acc / total_imgs)
-        mean_f1_score = (f1_score / total_imgs)
-        print("Loss = " + str(round(loss_over_epoch, 2)))
-        print("Accuracy = " + str(round(mean_accuracy, 2)))
-        print("F1 score = " + str(round(mean_f1_score, 2)))
+            
+            if phase == "train":
+                #print("=======================================================")
+                #model_parameters = list(model.parameters())[-2:]
+                #for param_set in model_parameters:
+                #    print(param_set)
+                    #print(param_set.size())
+                #if i == 5:
+                #    exit()
+                mean_accuracy = (acc / total_imgs)
+                mean_f1_score = (f1_score / total_imgs)
+                print("Loss = " + str(round(loss_over_epoch, 2)))
+                print("Accuracy = " + str(round(mean_accuracy, 2)))
+                print("F1 score = " + str(round(mean_f1_score, 2)))
 
 
 if __name__ == '__main__':
