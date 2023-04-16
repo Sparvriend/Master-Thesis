@@ -2,7 +2,9 @@
 
 ## TODO in order of priority
 * TODO: Create synthetic data  
-       -> for each class, move the filter across the screen and the label across the filter (where applicable)  
+       -> Possibility: Procedural (in synthetic_data.py)  
+            -> TODO: Fix angled rectangle mapping  
+            -> Alternative: Use a model like MASK-RCNN to detect filter bounding boxes  
        -> Possibility: GANs  
        -> Possibility: Blender  
        -> Possibility: Diffusion models  
