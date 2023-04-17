@@ -11,9 +11,7 @@ Master-Thesis-Experiments/*/
 temp/
 arial.ttf
 Master-Thesis-Experiments/results.txt
-*.bmp
 *.jpg
-*.png
 *.jpeg
 tiny-imagenet-200/*
 Results
