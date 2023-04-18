@@ -1,15 +1,27 @@
-from PIL import Image, ImageStat
-import os
-import numpy as np
 import cv2
+import numpy as np
+import os
+from PIL import Image
+import random
+import time
+import torchvision.transforms as T
+
+
+# Path definitions:
+TEMPLATE_PATH = os.path.join("Synthetic-Samples", "templates")
+BACKGROUNDS_PATH = os.path.join("Synthetic-Samples", "background")
+CLASS_LABELS_PATH = os.path.join("data", "NTZFilterSynthetic", "class_labels")
+FILTER_SELECTED_PATH = os.path.join("data", "NTZFilterSynthetic", "filter_selected")
+FILTER_REMOVED_PATH = os.path.join("data", "NTZFilterSynthetic", "label_removed")
+SYNTHETIC_EX_PATH = os.path.join("data", "NTZFilterSynthetic", "synthetic_data_ex")
 
 
 def create_synthetic_data_dirs(class_names: list):
     """Function that creates all directories required for synthetic
     data generation and saving progress of intermediate steps.
-    
+
     Args:
-        class_names: List of class names
+        class_names: List of class names.
     """
     # Creating top level directory
     path = os.path.join("data", "NTZFilterSynthetic")
@@ -17,37 +29,40 @@ def create_synthetic_data_dirs(class_names: list):
         os.mkdir(path)
 
         # Creating directories for saving intermediate phases
-        # Only the class_labels directory has class directories
-        os.mkdir(os.path.join(path, "class_labels"))
-        os.mkdir(os.path.join(path, "filter_selected"))
-        os.mkdir(os.path.join(path, "label_removed"))
+        # class_labels and synthetic_data_ex have class subdirectories
+        dirlist = [CLASS_LABELS_PATH, FILTER_SELECTED_PATH, 
+                   FILTER_REMOVED_PATH, SYNTHETIC_EX_PATH]
+        for dir in dirlist:
+            os.mkdir(dir)
 
         # Lisiting and creating class directories for class_labels
-        path = os.path.join(path, "class_labels")
-        
+        class_labels_path = os.path.join(path, "class_labels")
+        synthetic_data_ex_path = os.path.join(path, "synthetic_data_ex")
         for class_name in class_names:
-            dir_path = os.path.join(path, class_name)
+            dir_path = os.path.join(class_labels_path, class_name)
+            os.mkdir(dir_path)
+            dir_path = os.path.join(synthetic_data_ex_path, class_name)
             os.mkdir(dir_path)
     else:
         pass
             
-def get_removed_label(class_names: list):
-    # 1. Detect the class label in the image, save it to appropriate directory in class_labels
-    # 2. Remove the class label from the image (save all images to label_removed, no class directories)
-    # 3. Remove (manually?) the images that have wrong label removal
-    #     -> Perhaps this can be done procedurally?
+def get_removed_label(class_names: list, data_types: list):
+    """Function that does two primary things: 1. Matching the class template
+    to the class label in the image (get_template_match), saving that
+    template to the class_labels directory. 2. Removing the class label
+    from the image, by filling in the pixels in the bounding box that fall
+    over a certain insensity threshold (remove_and_fill).
 
-    # Listing paths
-    data_types = ["train", "val", "test"]
-    template_path = os.path.join("Synthetic-Samples", "templates")
-    label_box_path = os.path.join("data", "NTZFilterSynthetic", "class_labels")
-
+    Args:
+        class_names: List of class names
+        data_types: List of data types (train, val, test)
+    """
     # Iterating over all images usable for data generation
     for data_type in data_types:
         for class_name in class_names:
             class_path = os.path.join("data", "NTZFilter", data_type, class_name)
             files = os.listdir(class_path)
-            template = Image.open(os.path.join(template_path, class_name + "_template.png"))
+            template = Image.open(os.path.join(TEMPLATE_PATH, class_name + "_template.png"))
             for file in files:
                 img = Image.open(os.path.join(class_path, file))
 
@@ -55,14 +70,13 @@ def get_removed_label(class_names: list):
                 top_left, bottom_right = get_template_match(img, template)
                 # Cropping and saving the resulting bounding box with the label
                 label_box = img.crop((top_left[0], top_left[1], bottom_right[0], bottom_right[1]))
-                label_box.save(os.path.join(label_box_path, class_name, file))
+                label_box.save(os.path.join(CLASS_LABELS_PATH, class_name, file))
 
                 # Removing the label from the image and filling up with background
                 img = remove_and_fill(img, top_left, bottom_right)
 
                 # Saving the resulting image
-                img_destination = os.path.join("data", "NTZFilterSynthetic",
-                                               "label_removed", file)
+                img_destination = os.path.join(FILTER_REMOVED_PATH, file)
                 img.save(img_destination)
 
 
@@ -164,6 +178,116 @@ def remove_and_fill(img, top_left, bottom_right):
     return img_label_removed
 
 
+def get_selected_filter():
+    """This function takes all filters with their labels removed from them
+    applies normalized pattern matching to each filter to see where in the image
+    the filter is located. A subset of those filters is then saved as a filter image
+    in the filters_selected directory, removing the filters that had their label
+    removed in an incorrect manner.
+    """
+    # Paths used in this function
+    filter_template_path = os.path.join(TEMPLATE_PATH, "filter_template.png")
+
+    # Get filter template and list of all filters with labels removed
+    # Get a list of all filters with labels removed
+    filter_template = Image.open(filter_template_path)
+    files = os.listdir(FILTER_REMOVED_PATH)
+    filters_selected = []
+
+    # Setting length and width thresholds for bounding box
+    # The thresholds are there such that only pixels in the middle are
+    # considered for label pixel counting
+    length_threshold = 12
+    width_threshold = 12
+
+    # Select the filter in the image
+    for file in files:
+        img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
+
+        # Matching each file to filter template
+        top_left, bottom_right = get_template_match(img, filter_template)
+
+        # Working with a grey image to check the intensity
+        grey_image = img.convert("L")
+
+        # x and y range of the bounding box
+        x_range = list(range(bottom_right[0] - top_left[0] - 2 * width_threshold))
+        y_range = list(range(bottom_right[1] - top_left[1] - 2 * length_threshold))
+        label_pixels = 0
+
+        # Looping over all pixels, the intensity range of 120-150 was picked
+        # by trial and error. The problem is that pixels on the edges of the filter
+        # have similar intensities to label pixels.
+        for x in x_range:
+            for y in y_range:
+                point_x = top_left[0] + x + width_threshold
+                point_y = top_left[1] + y + length_threshold
+                if grey_image.getpixel((point_x, point_y)) < 150 and \
+                   grey_image.getpixel((point_x, point_y)) > 120:
+                    # The pixel is likely a label print pixel
+                    label_pixels += 1
+        
+        # If there are too many label pixels, the label was probably not removed correctly
+        if label_pixels < 100:
+            # Cropping and saving the resulting bounding box with the label
+            filter_box = img.crop((top_left[0], top_left[1], bottom_right[0], bottom_right[1]))
+            filter_box.save(os.path.join(FILTER_SELECTED_PATH, file))
+            filters_selected.append(file)
+        
+    print("Amount of filters selected out of total: " + 
+          str(len(filters_selected)) + "/" + str(len(files)))
+
+
+def generate_synthetic_data(class_names: list, n_data: int):
+    # Getting a list of all filter images and subsetting
+    all_filters = os.listdir(FILTER_SELECTED_PATH)
+    subset_filters = random.sample(all_filters, n_data * len(class_names))
+
+    # Backgrounds
+    backgrounds = os.listdir(BACKGROUNDS_PATH)
+    
+    for i, class_name in enumerate(class_names):
+        class_labels = os.listdir(os.path.join(CLASS_LABELS_PATH, class_name))
+        subset_class_labels = random.sample(class_labels, n_data)
+        for j, class_label in enumerate(subset_class_labels):
+            # Paste the class label randomly somewhere on the filter
+            # But restricted, such that it does fall in the right area
+            filter_img = Image.open(os.path.join(FILTER_SELECTED_PATH,
+                                                 subset_filters[i*len(class_names)+j]))
+            class_label_img = Image.open(os.path.join(CLASS_LABELS_PATH,
+                                                      class_name, class_label))
+            
+            # Randomly selecting filter location
+            w_label, h_label = class_label_img.size
+            w_filter, h_filter = filter_img.size
+            x = random.randint(0, w_filter - w_label)
+            y = random.randint(0, h_filter - h_label)
+
+            # Applying random rotation and random horizontal flip transformation
+            # Then pasting on the filter
+            transform = T.Compose([T.RandomChoice([T.RandomRotation(degrees = (0, 15)),
+                                                   T.Lambda(lambda x: x)]),
+                                   T.RandomHorizontalFlip(p = 0.25)])
+            class_label_img = transform(class_label_img)
+            filter_img.paste(class_label_img, (x, y))
+
+            # Then paste the filter img randomly somewhere on the background
+            # Ensuring that the top 60 pixels and bottom 30 pixels are not
+            # possible, since the edge of the filter system is there
+            background_img = Image.open(os.path.join(BACKGROUNDS_PATH,
+                                                     random.choice(backgrounds)))
+            w_background, h_background = background_img.size
+            x = random.randint(0, w_background - w_filter)
+            y = random.randint(60, h_background - h_filter - 30)
+
+            # Pasting filter with label and saving
+            background_img.paste(filter_img, (x, y))
+            background_img.save(os.path.join(SYNTHETIC_EX_PATH, class_name,
+                                             "example_" + str(i*len(class_names) + j) + ".png"))
+            
+            # Post-processing steps should go here
+
+
 def active_contours():
     # Uses active contours models
     # https://scikit-image.org/docs/stable/auto_examples/edges/plot_active_contours.html
@@ -174,7 +298,7 @@ def setup_data_generation():
     # Creating synthetic data pipeline:
     # Phase 1 - Getting all the data together
     # 1. Detect the class label in the image, save it to appropriate directory in class_labels
-    # 2. Remove the class label from the image (save all images to label_removed, no class directories)
+    # 2. Remove the class label from the image (save all images to label_removed, no class directories) 
     # 3. Remove (manually?) the images that have wrong label removal
     #     -> Perhaps this can be done procedurally?
     # 4. Select the filter in the image by using the filter template, save those to filter_selected
@@ -182,22 +306,39 @@ def setup_data_generation():
     #     -> Again, perhaps this can be done procedurally
     # Phase 2 - Generating synthetic data
     # 6. Loop through all filters available in filter_selected, paste a class label from class_labels
-    #    on it, and paste that onto the background. Voila, synthetic data.
+    #    on it, and paste that onto the background.
+    # 7. Post-processing: Cleaning the images pasted on top of each other
+    # Apply some normalization/blurring technique such that the edges fit better
+    # -> Both of the label on the filter and the filter on the background
+    # Apply inpainting technique that fills completely black pixels which result from rotation
 
     # OPTIONAL: Perform a dataset comparison study, is the model capable of recognizing if
     # an image is synthetic or not?
     # TODO: Fix angled rectangle mapping in template_matching()
     # https://stackoverflow.com/questions/18207181/opencv-python-draw-minarearect-rotatedrect-not-implemented
     # Try different angles and pick best one based on some criteria
-    # TODO: Fix half-print label removal (none of the labels are correctly extracted)
+    # TODO: Implement a function that is called at the end of get_removed_label() that
+    # removes class_labels that were not removed correctly (e.g. fully white class label)
+    # Or restrict when a class label is saved
+    # Or combine it with the get_selected_filter() function, since that already detects
+    # which class labels were removed correctly
+    # TODO: Step 7!
 
+    # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]
+    data_types = ["train", "val", "test"]
 
-    create_synthetic_data_dirs(class_names)
-    get_removed_label(class_names) # Steps 1-3
+    start_time = time.time()
+    #create_synthetic_data_dirs(class_names)
+    #get_removed_label(class_names, data_types) # Steps 1-3
     #get_selected_filter() # Steps 4-5
-    #generate_synthetic_data() # Step 6
+    generate_synthetic_data(class_names, 5) # Step 6-7
+
+    # Recording total time passed
+    elapsed_time = time.time() - start_time
+    print("Total data generation time (H/M/S) = ", 
+          time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 
 
 if __name__ == '__main__':

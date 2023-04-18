@@ -4,9 +4,9 @@ import random
 import shutil
 
 # Forming file paths for destinations of training, testing and validation data
-TRAIN_DESTINATION = os.path.join("NTZFilter", "data", "train")
-VAL_DESTINATION = os.path.join("NTZFilter", "data", "val")
-TEST_DESTINATION = os.path.join("NTZFilter", "data", "test")
+TRAIN_DESTINATION = os.path.join("data", "NTZFilter", "train")
+VAL_DESTINATION = os.path.join("data", "NTZFilter", "val")
+TEST_DESTINATION = os.path.join("data", "NTZFilter", "test")
 
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION = "NTZ_filter_label_data"
@@ -144,5 +144,5 @@ def create_dirs():
 if __name__ == '__main__':
     # Make sure to run create_dirs() before running split_and_move()
     #create_dirs()
-    #split_and_move_NTZ()
-    split_and_move_CIFAR()
+    split_and_move_NTZ()
+    #split_and_move_CIFAR()
