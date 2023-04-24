@@ -1,5 +1,6 @@
 NTZ_filter_label_data/
 data/
+venv/
 preliminary_pipeline
 token.txt
 __pycache__/

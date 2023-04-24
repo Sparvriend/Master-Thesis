@@ -70,14 +70,27 @@ def get_removed_label(class_names: list, data_types: list):
                 top_left, bottom_right = get_template_match(img, template)
                 # Cropping and saving the resulting bounding box with the label
                 label_box = img.crop((top_left[0], top_left[1], bottom_right[0], bottom_right[1]))
-                label_box.save(os.path.join(CLASS_LABELS_PATH, class_name, file))
 
-                # Removing the label from the image and filling up with background
-                img = remove_and_fill(img, top_left, bottom_right)
+                # Counting the amount of label pixels
+                label_pixels = np.array(label_box.convert("L"))
+                label_count = 0
+                for y in range(label_pixels.shape[0]):
+                    for x in range(label_pixels.shape[1]):
+                        if label_pixels[y, x] < 220:
+                            label_count += 1
+                # If not within this range, template matching failed
+                if label_count < 3000 and label_count > 1000:
+                    label_box.save(os.path.join(CLASS_LABELS_PATH, class_name, file))
 
-                # Saving the resulting image
-                img_destination = os.path.join(FILTER_REMOVED_PATH, file)
-                img.save(img_destination)
+                    # Only taking filters from fail_label_not_fully_printed and no_fail
+                    # Since the other classes have unstable inpainting
+                    if class_name == "fail_label_not_fully_printed" or class_name == "no_fail":
+                        # Removing the label from the image and filling up with background
+                        img = remove_and_fill(img, top_left, bottom_right)
+
+                        # Saving the resulting image
+                        img_destination = os.path.join(FILTER_REMOVED_PATH, file)
+                        img.save(img_destination)
 
 
 def get_template_match(img, template):
@@ -238,6 +251,47 @@ def get_selected_filter():
           str(len(filters_selected)) + "/" + str(len(files)))
 
 
+def paint_rect_edges(img, top_left, bottom_right, edge_width, radius):
+    """This function takes a PIL image, converts to cv2, creates a mask,
+    fills the mask with a rectangle based on top_left and bottom_right
+    based on an edge_width. CV2's inpainting function is then used to
+    normalize these mask pixels by comparing to nearest pixels within radius.
+
+    Args:
+        img: PIL image
+        top_left: Tuple of (x, y) coordinates of top left corner of bounding box.
+        bottom_right: Tuple of (x, y) coordinates of bottom right corner of bounding box.
+        edge_width: Width of the edges of the rectangle to be filled.
+        radius: Radius of the inpainting function.
+    """
+    # Converting to CV2, create mask and do inpainting
+    img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    mask = np.zeros((img.shape[0], img.shape[1]), dtype = np.uint8)
+    x1, y1 = top_left
+    x2, y2 = bottom_right
+    
+    # Checking if the mask goes out of bounds with added edge width
+    if x1 - edge_width < 0:
+        x1 = 0
+    if y1 - edge_width < 0:
+        y1 = 0
+    if x2 + edge_width > img.shape[1]:
+        x2 = img.shape[1] - 1
+    if y2 + edge_width > img.shape[0]:
+        y2 = img.shape[0] - 1
+
+    # Creating mask
+    mask[y1 - edge_width:y1, x1 - edge_width:x2 + edge_width+1] = 1
+    mask[y2 + 1:y2 + 1 + edge_width, x1 - edge_width:x2 + edge_width + 1] = 1
+    mask[y1:y2 + 1, x1 - edge_width:x1] = 1
+    mask[y1:y2 + 1, x2 + 1:x2 + 1 + edge_width] = 1
+    img = cv2.inpaint(img, mask, radius, cv2.INPAINT_NS)
+
+    # And converting back to PIL
+    img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    return img
+
+
 def generate_synthetic_data(class_names: list, n_data: int):
     # Getting a list of all filter images and subsetting
     all_filters = os.listdir(FILTER_SELECTED_PATH)
@@ -257,6 +311,18 @@ def generate_synthetic_data(class_names: list, n_data: int):
             class_label_img = Image.open(os.path.join(CLASS_LABELS_PATH,
                                                       class_name, class_label))
             
+            # Converting the class_label_img to a version that only has pixels for the label
+            # All other pixels should be transparent/e.g. taken from the filter iself
+            class_label_img = class_label_img.convert("RGBA")
+            class_label_img_grey = class_label_img.convert("L")
+            mask = np.zeros((class_label_img.size[1], class_label_img.size[0]), dtype = np.uint8)
+            for y in range(class_label_img.size[1]):
+                for x in range(class_label_img.size[0]):
+                    if class_label_img_grey.getpixel((x, y)) < 220 and \
+                        class_label_img_grey.getpixel((x, y)) > 120:
+                        mask[y, x] = 255
+            class_label_img.putalpha(Image.fromarray(mask))
+            
             # Randomly selecting filter location
             w_label, h_label = class_label_img.size
             w_filter, h_filter = filter_img.size
@@ -265,11 +331,16 @@ def generate_synthetic_data(class_names: list, n_data: int):
 
             # Applying random rotation and random horizontal flip transformation
             # Then pasting on the filter
-            transform = T.Compose([T.RandomChoice([T.RandomRotation(degrees = (0, 15)),
+            transform = T.Compose([T.RandomChoice([T.RandomRotation(degrees = (0, 10)),
                                                    T.Lambda(lambda x: x)]),
                                    T.RandomHorizontalFlip(p = 0.25)])
             class_label_img = transform(class_label_img)
-            filter_img.paste(class_label_img, (x, y))
+            filter_img.paste(class_label_img, (x, y), mask = class_label_img.split()[-1])
+
+            # Post processing step of inpainting the edges of the filter
+            filter_img = paint_rect_edges(filter_img, (x, y),
+                             (x + class_label_img.size[0], y + class_label_img.size[1]),
+                             edge_width = 3, radius = 4)
 
             # Then paste the filter img randomly somewhere on the background
             # Ensuring that the top 60 pixels and bottom 30 pixels are not
@@ -280,12 +351,13 @@ def generate_synthetic_data(class_names: list, n_data: int):
             x = random.randint(0, w_background - w_filter)
             y = random.randint(60, h_background - h_filter - 30)
 
-            # Pasting filter with label and saving
+            # Pasting filter with label, applying post-processing and saving
             background_img.paste(filter_img, (x, y))
+            background_img = paint_rect_edges(background_img, (x, y),
+                             (x + filter_img.size[0], y + filter_img.size[1]),
+                             edge_width = 8, radius = 20)
             background_img.save(os.path.join(SYNTHETIC_EX_PATH, class_name,
                                              "example_" + str(i*len(class_names) + j) + ".png"))
-            
-            # Post-processing steps should go here
 
 
 def active_contours():
@@ -308,32 +380,27 @@ def setup_data_generation():
     # 6. Loop through all filters available in filter_selected, paste a class label from class_labels
     #    on it, and paste that onto the background.
     # 7. Post-processing: Cleaning the images pasted on top of each other
-    # Apply some normalization/blurring technique such that the edges fit better
-    # -> Both of the label on the filter and the filter on the background
-    # Apply inpainting technique that fills completely black pixels which result from rotation
+    # Applying inpainting around the rectangle that is pasted on the image
+    # (Applied after each pasting step)
 
     # OPTIONAL: Perform a dataset comparison study, is the model capable of recognizing if
     # an image is synthetic or not?
-    # TODO: Fix angled rectangle mapping in template_matching()
-    # https://stackoverflow.com/questions/18207181/opencv-python-draw-minarearect-rotatedrect-not-implemented
-    # Try different angles and pick best one based on some criteria
-    # TODO: Implement a function that is called at the end of get_removed_label() that
-    # removes class_labels that were not removed correctly (e.g. fully white class label)
-    # Or restrict when a class label is saved
-    # Or combine it with the get_selected_filter() function, since that already detects
-    # which class labels were removed correctly
-    # TODO: Step 7!
+    # TODO: Different locations of missing label print for fail_label_not_fully_printed
 
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]
     data_types = ["train", "val", "test"]
-
     start_time = time.time()
-    #create_synthetic_data_dirs(class_names)
-    #get_removed_label(class_names, data_types) # Steps 1-3
-    #get_selected_filter() # Steps 4-5
-    generate_synthetic_data(class_names, 5) # Step 6-7
+
+    print("Creating Synthetic data directories")
+    create_synthetic_data_dirs(class_names)
+    print("Getting class labels and saving filters without labels")
+    get_removed_label(class_names, data_types) # Steps 1-3
+    print("Matching filters")
+    get_selected_filter() # Steps 4-5
+    print("Generating Synthetic data")
+    generate_synthetic_data(class_names, 5) # Step 7-8
 
     # Recording total time passed
     elapsed_time = time.time() - start_time

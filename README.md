@@ -5,7 +5,9 @@
        -> Possibility: Procedural (in synthetic_data.py)  
             -> TODO: Fix angled rectangle mapping  
             -> Alternative: Use a model like MASK-RCNN to detect filter bounding boxes  
-       -> Possibility: GANs  
+       -> Possibility: GANs -> Combine with CIFAR100?  
+            -> https://github.com/eriklindernoren/PyTorch-GAN  
+            -> https://github.com/ajbrock/BigGAN-PyTorch  
        -> Possibility: Blender  
        -> Possibility: Diffusion models  
 * TODO: Finish explainability of the model  
@@ -26,6 +28,7 @@
       -> Look into adding augmentation to uncertainty methods  
       -> Convert Saliency Map to RGB  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
+* TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils)
 * TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
       -> other explain_model options should be taken from command line input           
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
