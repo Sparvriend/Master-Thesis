@@ -9,7 +9,7 @@
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
        -> Possibility: Blender  
-       -> Possibility: Diffusion models  
+       -> Possibility: Diffusion models  -> Better than GANS (Matias)
 * TODO: Finish explainability of the model  
       -> Uncertainty prediction (DUQ)  
           -> Think of a method of expressing the distance as uncertainty  

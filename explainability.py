@@ -10,8 +10,10 @@ from PIL import Image
 import torch
 import torchvision.models
 import torchvision.transforms as T
+from torchsummary import summary
 from tqdm import tqdm
 import warnings
+
 
 # Temproary imports for RBF DUQ
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
@@ -313,10 +315,20 @@ def rbf_uncertainty():
 
     # Loading model and defining experiment name
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
-    model.classifier[1] = RBF(1280, 4)
+    print("here1")
+    print(model)
+    #model.classifier[1] = nn.Identity()
+    #model = torch.nn.Sequential(*(list(model.children())[:-1]))
+    model.classifier = nn.Sequential(nn.Dropout(p = 0.2))
+    print(model)
+    model.classifier = nn.Sequential(nn.Dropout(p = 0.2), RBF(model, 1280, 4))
+    print("this line")
     model.to(device)
+    print(model)
+    print("here2")
     #summary(model, (3, 224, 224))
     #print(model)
+    #model = torch.nn.Sequential(*(list(model.children())[:-1]))
 
     data_loaders = get_data_loaders(transform = get_transforms("no_augment"))
     
@@ -360,18 +372,21 @@ def rbf_uncertainty():
                     optimizer.zero_grad()
                     model_output = model(inputs)
                     predicted_labels = model_output.argmax(dim = 1)
+                    model.classifier[1].update_centres(inputs, labels)
                     
-                    _, predicted = torch.max(model_output.data, 1)
-                    one_hot_predicted_labels = torch.zeros(model_output.size(), requires_grad = True).to(device)
-                    one_hot_predicted_labels = one_hot_predicted_labels.scatter_(1, predicted.view(-1, 1), 1)
+                    #_, predicted = torch.max(model_output.data, 1)
+                    #one_hot_predicted_labels = torch.zeros(model_output.size(), requires_grad = True).to(device)
+                    #one_hot_predicted_labels = one_hot_predicted_labels.clone().scatter_(1, predicted.view(-1, 1), 1)
 
-                    one_hot_labels = torch.nn.functional.one_hot(labels, 4)
+                    #one_hot_labels = torch.nn.functional.one_hot(labels, 4)
 
                     #print(one_hot_predicted_labels)
                     #print(one_hot_labels)
                     #exit()
                     loss = criterion(model_output, labels)
                     #loss = criterion(one_hot_predicted_labels, one_hot_labels.float())
+                    #print(predicted_labels)
+                    #print(labels)
                     acc += acc_metric(predicted_labels, labels).item()
                     f1_score += f1_metric(predicted_labels, labels).item()
                     if phase == "train":
