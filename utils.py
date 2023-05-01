@@ -54,6 +54,8 @@ class CustomCorruption:
 class RBF(nn.Module):
     """RBF layer definition taken from
     https://github.com/JeremyLinux/PyTorch-Radial-Basis-Function-Layer/blob/master/Torch%20RBF/torch_rbf.py
+    and Joost van Amersfoort's implementation of DUQ
+    https://github.com/y0ast/deterministic-uncertainty-quantification/blob/master/utils/resnet_duq.py
     """
     def __init__(self, fe, in_features, out_features):
         super(RBF, self).__init__()
@@ -62,7 +64,7 @@ class RBF(nn.Module):
         # Shape kernel: centroid size * num_classes * in_features
         # 1280 * 4 * 1280
         self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features))
-        self.N = torch.zeros(out_features)
+        self.N = torch.zeros(out_features) + 13 # (Why did Joost set this value to 13?)
         self.m = torch.zeros(in_features, out_features)
         self.log_sigma = 0.1
         self.gamma = 0.999
@@ -82,18 +84,30 @@ class RBF(nn.Module):
 
     def update_centres(self, inputs, labels):
         # Defining update function
-        update_f = lambda x: self.gamma * x + (1 - self.gamma)
+        update_f = lambda x, y: self.gamma * x + (1 - self.gamma) * y
 
+        # Summing labels for updating N
+        unique, counts = torch.unique(labels, return_counts = True)
+        labels_sum = torch.zeros(self.out_features, dtype = torch.long)
+        labels_sum[unique] = counts
+        
+        # Converting labels to one-hot encoded:
+        # labels = torch.nn.functional.one_hot(labels, num_classes = 4)
+ 
         # Update N here
-        self.N = update_f(self.N) * labels.sum(0)
+        self.N = update_f(self.N, labels_sum)
 
         # Calculating centroid sum
         x = self.fe(inputs)
         x = torch.einsum("ij, mnj->imn", x, self.kernels)
-        centroid_sum = torch.einsum("ijk, ik->jk", x, labels)
+        # x size = [32, 1280, 4] = [batch_size, centroid_size, num_classes]
+        # labels size = [32] = [batch_size]
+        labels = labels.unsqueeze(1)
+        x = x.type(torch.LongTensor)
+        centroid_sum = torch.einsum("ijk, il->jk", x, labels)
 
         # Update m here
-        self.m = update_f(self.m) * centroid_sum
+        self.m = update_f(self.m, centroid_sum)
 
     def forward(self, input):
         x = torch.einsum("ij, mnj->imn", input, self.kernels)
@@ -111,7 +125,8 @@ class RBF(nn.Module):
         distances = ((x - c) ** 2).mean(1) / (2 * self.log_sigma ** 2)
         # With Gaussian
         # distances = [32, 4]
-        return torch.exp(-1 * distances)
+        distances = torch.exp(-1 * distances)
+        return distances
         
 
 def convert_to_list(labels: list) -> list:

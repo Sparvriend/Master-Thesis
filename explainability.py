@@ -315,22 +315,17 @@ def rbf_uncertainty():
 
     # Loading model and defining experiment name
     model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
-    print("here1")
-    print(model)
     #model.classifier[1] = nn.Identity()
     #model = torch.nn.Sequential(*(list(model.children())[:-1]))
     model.classifier = nn.Sequential(nn.Dropout(p = 0.2))
-    print(model)
-    model.classifier = nn.Sequential(nn.Dropout(p = 0.2), RBF(model, 1280, 4))
-    print("this line")
+    feature_extractor = copy.deepcopy(model)
+    model.classifier = nn.Sequential(nn.Dropout(p = 0.2), RBF(feature_extractor, 1280, 4))
     model.to(device)
-    print(model)
-    print("here2")
     #summary(model, (3, 224, 224))
     #print(model)
     #model = torch.nn.Sequential(*(list(model.children())[:-1]))
 
-    data_loaders = get_data_loaders(transform = get_transforms("no_augment"))
+    data_loaders = get_data_loaders(transform = get_transforms("categorical"))
     
     # Inference loop:
     # model.eval()
@@ -349,7 +344,7 @@ def rbf_uncertainty():
     #criterion = nn.BCEWithLogitsLoss()
 
     # Training loop:
-    for i in range(300):
+    for _ in range(300):
         for phase in ["train", "val"]:
             if phase == "train":
                 model.train()
@@ -362,17 +357,16 @@ def rbf_uncertainty():
             loss_over_epoch = 0
             acc = 0
             f1_score = 0
-            total_imgs = 0
             combined_labels = []
             combined_labels_pred = []
             for inputs, labels in tqdm(data_loaders[phase]):
                 with torch.set_grad_enabled(phase == "train"):
+                    model.train()
                     inputs = inputs.to(device)
                     labels = labels.to(device)
                     optimizer.zero_grad()
                     model_output = model(inputs)
                     predicted_labels = model_output.argmax(dim = 1)
-                    model.classifier[1].update_centres(inputs, labels)
                     
                     #_, predicted = torch.max(model_output.data, 1)
                     #one_hot_predicted_labels = torch.zeros(model_output.size(), requires_grad = True).to(device)
@@ -383,6 +377,9 @@ def rbf_uncertainty():
                     #print(one_hot_predicted_labels)
                     #print(one_hot_labels)
                     #exit()
+                    #print(model_output[0])
+                    #print(labels[0])
+                    #print(predicted_labels)
                     loss = criterion(model_output, labels)
                     #loss = criterion(one_hot_predicted_labels, one_hot_labels.float())
                     #print(predicted_labels)
@@ -393,6 +390,12 @@ def rbf_uncertainty():
                         loss.backward()
                         optimizer.step()
 
+                    # Updating RBF centres
+                    inputs.requires_grad = False
+                    with torch.no_grad():
+                        model.eval()
+                        model.classifier[1].update_centres(inputs, labels)
+
                     # model_parameters = list(model.parameters())
                     # for model_parameter in model_parameters:
                     #     print(model_parameter.requires_grad)
@@ -402,10 +405,8 @@ def rbf_uncertainty():
                     #     print("=============================")
                     #exit()
 
-                    #print(list(model.parameters())[0].grad)
                     loss_over_epoch += loss.item()
                     #print(loss_over_epoch)
-                    total_imgs += len(inputs)
                     combined_labels.append(labels)
                     combined_labels_pred.append(predicted_labels)
             
@@ -417,8 +418,8 @@ def rbf_uncertainty():
                     #print(param_set.size())
                 #if i == 5:
                 #    exit()
-                mean_accuracy = (acc / total_imgs)
-                mean_f1_score = (f1_score / total_imgs)
+                mean_accuracy = (acc / len(data_loaders["train"]))
+                mean_f1_score = (f1_score / len(data_loaders["train"]))
                 print("Loss = " + str(round(loss_over_epoch, 2)))
                 print("Accuracy = " + str(round(mean_accuracy, 2)))
                 print("F1 score = " + str(round(mean_f1_score, 2)))
