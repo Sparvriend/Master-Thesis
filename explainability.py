@@ -22,7 +22,7 @@ from torch import nn, optim
 
 from utils import cutoff_date, flatten_list, get_data_loaders, \
                   save_test_predicts, remove_predicts, cutoff_classification_layer, \
-                  RBF, get_transforms
+                  RBF_model, get_transforms
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
@@ -310,41 +310,25 @@ def rbf_uncertainty():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Setting batch size
-    batch_size = 32
-
     # Loading model and defining experiment name
-    model = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
-    #model.classifier[1] = nn.Identity()
-    #model = torch.nn.Sequential(*(list(model.children())[:-1]))
-    model.classifier = nn.Sequential(nn.Dropout(p = 0.2))
-    feature_extractor = copy.deepcopy(model)
-    model.classifier = nn.Sequential(nn.Dropout(p = 0.2), RBF(feature_extractor, 1280, 4))
+    feature_extractor = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
+    feature_extractor.classifier = nn.Sequential(nn.Dropout(p = 0.2))
+    model = RBF_model(feature_extractor, 1280, 4, device)
     model.to(device)
-    #summary(model, (3, 224, 224))
-    #print(model)
-    #model = torch.nn.Sequential(*(list(model.children())[:-1]))
 
-    data_loaders = get_data_loaders(transform = get_transforms("categorical"))
-    
-    # Inference loop:
-    # model.eval()
-    # with torch.no_grad():
-    #     for inputs, labels in tqdm(data_loaders["train"]):
-    #         inputs = inputs.to(device)
-    #         model_output = model(inputs)
-    #         predicted_labels = model_output.argmax(dim=1)
-    #         print(predicted_labels)
+    #data_loaders = get_data_loaders(transform = get_transforms("categorical"))
+    #data_loaders = get_data_loaders(transform = get_transforms("rand_augment"))
+    data_loaders = get_data_loaders(transform = get_transforms("no_augment"))
 
-    optimizer = optim.SGD(model.parameters(), lr = 0.001, momentum = 0.9, weight_decay = 0.001)
-    #optimizer = optim.Adam(model.parameters(), lr = 0.001, weight_decay = 0.001)
+    # Optimizer params taken from DUQ paper
+    optimizer = optim.SGD(model.parameters(), lr = 0.05, momentum = 0.9, weight_decay = 0.0005)
     acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
     f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
     criterion = nn.CrossEntropyLoss()
-    #criterion = nn.BCEWithLogitsLoss()
 
     # Training loop:
-    for _ in range(300):
+    for i in range(50):
+        print("Epoch = " + str(i))
         for phase in ["train", "val"]:
             if phase == "train":
                 model.train()
@@ -352,7 +336,6 @@ def rbf_uncertainty():
             else:
                 model.eval()
                 print("Validation phase")
-            
             # Set model metrics to 0 and starting model timer
             loss_over_epoch = 0
             acc = 0
@@ -361,69 +344,40 @@ def rbf_uncertainty():
             combined_labels_pred = []
             for inputs, labels in tqdm(data_loaders[phase]):
                 with torch.set_grad_enabled(phase == "train"):
-                    model.train()
+                    optimizer.zero_grad()
                     inputs = inputs.to(device)
                     labels = labels.to(device)
-                    optimizer.zero_grad()
+                    inputs.requires_grad_(True)
+
+                    # Forward pass
                     model_output = model(inputs)
                     predicted_labels = model_output.argmax(dim = 1)
                     
-                    #_, predicted = torch.max(model_output.data, 1)
-                    #one_hot_predicted_labels = torch.zeros(model_output.size(), requires_grad = True).to(device)
-                    #one_hot_predicted_labels = one_hot_predicted_labels.clone().scatter_(1, predicted.view(-1, 1), 1)
-
-                    #one_hot_labels = torch.nn.functional.one_hot(labels, 4)
-
-                    #print(one_hot_predicted_labels)
-                    #print(one_hot_labels)
-                    #exit()
-                    #print(model_output[0])
-                    #print(labels[0])
-                    #print(predicted_labels)
+                    # Calculating loss and metrics
                     loss = criterion(model_output, labels)
-                    #loss = criterion(one_hot_predicted_labels, one_hot_labels.float())
-                    #print(predicted_labels)
-                    #print(labels)
                     acc += acc_metric(predicted_labels, labels).item()
                     f1_score += f1_metric(predicted_labels, labels).item()
+
                     if phase == "train":
+                        # Updating model weights
                         loss.backward()
                         optimizer.step()
-
-                    # Updating RBF centres
-                    inputs.requires_grad = False
-                    with torch.no_grad():
-                        model.eval()
-                        model.classifier[1].update_centres(inputs, labels)
-
-                    # model_parameters = list(model.parameters())
-                    # for model_parameter in model_parameters:
-                    #     print(model_parameter.requires_grad)
-                    #     print(model_parameter.grad)
-                    #     if model_parameter.is_leaf == False:
-                    #         print("model_param is not a leaf")
-                    #     print("=============================")
-                    #exit()
-
+                        # Updating RBF centres
+                        inputs.requires_grad_(False)
+                        with torch.no_grad():
+                            model.eval()
+                            model.update_centres(inputs, labels)
+    
                     loss_over_epoch += loss.item()
-                    #print(loss_over_epoch)
                     combined_labels.append(labels)
                     combined_labels_pred.append(predicted_labels)
-            
-            if phase == "train":
-                #print("=======================================================")
-                #model_parameters = list(model.parameters())[-2:]
-                #for param_set in model_parameters:
-                #    print(param_set)
-                    #print(param_set.size())
-                #if i == 5:
-                #    exit()
-                mean_accuracy = (acc / len(data_loaders["train"]))
-                mean_f1_score = (f1_score / len(data_loaders["train"]))
-                print("Loss = " + str(round(loss_over_epoch, 2)))
-                print("Accuracy = " + str(round(mean_accuracy, 2)))
-                print("F1 score = " + str(round(mean_f1_score, 2)))
 
+            # Printing performance metrics
+            mean_accuracy = (acc / len(data_loaders[phase]))
+            mean_f1_score = (f1_score / len(data_loaders[phase]))
+            print("Loss = " + str(round(loss_over_epoch, 2)))
+            print("Accuracy = " + str(round(mean_accuracy, 2)))
+            print("F1 score = " + str(round(mean_f1_score, 2)))
 
 if __name__ == '__main__':
     # Running DUQ on a model that has been through training phase

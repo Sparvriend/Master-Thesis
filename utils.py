@@ -51,36 +51,60 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
-class RBF(nn.Module):
+class RBF_model(nn.Module):
     """RBF layer definition taken from
     https://github.com/JeremyLinux/PyTorch-Radial-Basis-Function-Layer/blob/master/Torch%20RBF/torch_rbf.py
     and Joost van Amersfoort's implementation of DUQ
     https://github.com/y0ast/deterministic-uncertainty-quantification/blob/master/utils/resnet_duq.py
     """
-    def __init__(self, fe, in_features, out_features):
-        super(RBF, self).__init__()
+    def __init__(self, fe, in_features, out_features, device):
+        super(RBF_model, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         # Shape kernel: centroid size * num_classes * in_features
         # 1280 * 4 * 1280
-        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features))
-        self.N = torch.zeros(out_features) + 13 # (Why did Joost set this value to 13?)
-        self.m = torch.zeros(in_features, out_features)
-        self.log_sigma = 0.1
+        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features)).to(device)
+        self.N = (torch.zeros(out_features) + 13).to(device) # (Why did Joost set this value to 13?)
+        self.m = torch.zeros(in_features, out_features).to(device)
+        self.m *= self.N
+        self.sigma = 0.1
         self.gamma = 0.999
         self.fe = fe
+        self.device = device
         self.reset_parameters()
 
     def reset_parameters(self):
         # Centres from uniform distribution instead of normal distribution
         # nn.init.normal_(self.centres, 0, 1)
-        self.m = nn.init.normal_(self.m, 0.05, 1)
+        nn.init.normal_(self.m, 0.05, 1)
         # sigmas not per class
         # nn.init.constant_(self.log_sigmas, 0)
 
         # KERNELS from normal distribution
         #nn.init.normal_(self.kernels, 0, 1)
-        self.kernels = nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
+        nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
+
+
+    def forward(self, x):
+        z = self.fe(x)
+        z = torch.einsum("ij, mnj->imn", z, self.kernels).to(self.device)
+        # Input size after kernel combination through einsum:
+        # [32, 1280, 4]
+
+        # Getting embedded centres
+        # c = self.centres.unsqueeze(0)
+        c = (self.m / self.N.unsqueeze(0)).unsqueeze(0).to(self.device)
+        # Centroid size (should be):
+        # [1, 1280, 4]
+
+        # Distances (After - operation): [32, 1280, 4]
+        #distances = (z - c).pow(2).sum(-1).pow(0.5)
+        distances = ((z - c) ** 2).mean(1) / (2 * self.sigma ** 2)
+        # With Gaussian
+        # distances = [32, 4]
+        distances = torch.exp(-1 * distances)
+        return distances
+
 
     def update_centres(self, inputs, labels):
         # Defining update function
@@ -88,13 +112,14 @@ class RBF(nn.Module):
 
         # Summing labels for updating N
         unique, counts = torch.unique(labels, return_counts = True)
-        labels_sum = torch.zeros(self.out_features, dtype = torch.long)
+        labels_sum = torch.zeros(self.out_features, dtype = torch.long).to(self.device)
         labels_sum[unique] = counts
         
         # Converting labels to one-hot encoded:
         # labels = torch.nn.functional.one_hot(labels, num_classes = 4)
  
         # Update N here
+        # N only gets smaller from 13
         self.N = update_f(self.N, labels_sum)
 
         # Calculating centroid sum
@@ -102,32 +127,13 @@ class RBF(nn.Module):
         x = torch.einsum("ij, mnj->imn", x, self.kernels)
         # x size = [32, 1280, 4] = [batch_size, centroid_size, num_classes]
         # labels size = [32] = [batch_size]
-        labels = labels.unsqueeze(1)
+        labels = labels.unsqueeze(1).cpu()
         x = x.type(torch.LongTensor)
-        centroid_sum = torch.einsum("ijk, il->jk", x, labels)
+        centroid_sum = torch.einsum("ijk, il->jk", x, labels).to(self.device)
 
         # Update m here
         self.m = update_f(self.m, centroid_sum)
 
-    def forward(self, input):
-        x = torch.einsum("ij, mnj->imn", input, self.kernels)
-        # Input size after kernel combination through einsum:
-        # [32, 1280, 4]
-
-        # Getting embedded centres
-        # c = self.centres.unsqueeze(0)
-        c = (self.m / self.N.unsqueeze(0)).unsqueeze(0)
-        # Centroid size (should be):
-        # [1, 1280, 4]
-
-        # Distances (After - operation): [32, 1280, 4]
-        #distances = (x - c).pow(2).sum(-1).pow(0.5)
-        distances = ((x - c) ** 2).mean(1) / (2 * self.log_sigma ** 2)
-        # With Gaussian
-        # distances = [32, 4]
-        distances = torch.exp(-1 * distances)
-        return distances
-        
 
 def convert_to_list(labels: list) -> list:
     """Function that converts a list of tensors to a list of lists.
