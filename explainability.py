@@ -10,7 +10,6 @@ from PIL import Image
 import torch
 import torchvision.models
 import torchvision.transforms as T
-from torchsummary import summary
 from tqdm import tqdm
 import warnings
 
@@ -20,11 +19,83 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 from torchmetrics import Accuracy, F1Score
 from torch import nn, optim
 
-from utils import cutoff_date, flatten_list, get_data_loaders, \
-                  save_test_predicts, remove_predicts, cutoff_classification_layer, \
-                  RBF_model, get_transforms
+from utils import cutoff_date, get_data_loaders, get_transforms
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
+
+
+class RBF_model(nn.Module):
+    """RBF layer definition taken from Joost van Amersfoort's implementation of DUQ:
+    https://github.com/y0ast/deterministic-uncertainty-quantification/blob/master/utils/resnet_duq.py
+    and inspired by Matias Valdenegro Toro implementation:
+    https://github.com/mvaldenegro/keras-uncertainty/blob/master/keras_uncertainty/layers/rbf_layers.py
+
+    Variable explanations:
+    kernels = ?. Shape = [Fe out features, classes, fe out features]
+    N = ?. Shape = [Classes]
+    m = ?. Shape = [fe out features, classes]
+    # For MobileNetV2, fe out features is 1280
+
+    The essence of DUQ is that it learns a set of centroids for each class,
+    which it can then compare to new inputs during inference time. The
+    distance to the closest centroid is the uncertainty score.
+    """
+    def __init__(self, fe, in_features, out_features, device):
+        super(RBF_model, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.sigma = 0.1
+        self.gamma = 0.999
+        self.fe = fe
+        self.device = device
+
+        # Initializing kernels and centroids
+        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features)).to(device)
+        self.N = (torch.zeros(out_features) + 13).to(device) # (Why did Joost set this value to 13?)
+        self.m = torch.zeros(in_features, out_features).to(device)
+        self.m *= self.N
+
+        nn.init.normal_(self.m, 0.05, 1)
+        nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
+
+
+    def forward(self, x):
+        # Getting feature output from fe and then applying kernels
+        z = self.fe(x)
+        z = torch.einsum("ij, mnj->imn", z, self.kernels).to(self.device)
+
+        # Getting embedded centres
+        c = (self.m / self.N.unsqueeze(0)).unsqueeze(0).to(self.device)
+
+        # Getting distances to each centroid
+        distances = ((z - c) ** 2).mean(1) / (2 * self.sigma ** 2)
+
+        # With Gaussian distribution
+        distances = torch.exp(-1 * distances)
+        return distances
+
+
+    def update_centres(self, inputs, labels):
+        # Defining update function
+        update_f = lambda x, y: self.gamma * x + (1 - self.gamma) * y
+
+        # Summing labels for updating N
+        unique, counts = torch.unique(labels, return_counts = True)
+        labels_sum = torch.zeros(self.out_features, dtype = torch.long).to(self.device)
+        labels_sum[unique] = counts
+ 
+        # Update N
+        self.N = update_f(self.N, labels_sum)
+
+        # Calculating centroid sum
+        x = self.fe(inputs)
+        x = torch.einsum("ij, mnj->imn", x, self.kernels)
+        labels = labels.unsqueeze(1).cpu()
+        x = x.type(torch.LongTensor)
+        centroid_sum = torch.einsum("ijk, il->jk", x, labels).to(self.device)
+
+        # Update m here
+        self.m = update_f(self.m, centroid_sum)
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
@@ -143,169 +214,12 @@ def gen_model_explainability(explain_func, model: torchvision.models,
     visualize_explainability(explainability_attr, img_paths, img_desintation)
 
 
-def compare_feature_maps(feature_map: torch.Tensor, class_centroids: dict,
-                         predicted_labels: list, distances: list) -> tuple[list, list]:
-    """Function that compares the feature map of an image to the class
-    centroids. It calculates the euclidean distance to the closest class
-    centroid which is the label prediction, the distance is the uncertainty.
-    
-    Args:
-        feature_map: feature map of the image.
-        class_centroids: dictionary with class centroids.
-        predicted_labels: list of predicted labels.
-        distances: list of distances to the class centroids.
-    Returns:
-        The list of predicted labels and distances for 
-        the feature map comparison
-    """
-    centroid_dist = []
-    for _, class_centroid in class_centroids.items():
-        # Failsafe for if a class centroid does not exist
-        if class_centroid == []:
-            continue
-        # Convert to cpu, since that is what numpy requires
-        feature_map = feature_map.cpu()
-        class_centroid = class_centroid.cpu()
-        # Calculating the euclidean distance between the two feature maps
-        centroid_dist.append(np.linalg.norm(feature_map - class_centroid))
-    predicted_labels.append(centroid_dist.index(min(centroid_dist)))
-    distances.append(centroid_dist)
-
-    return predicted_labels, distances
-
-def deep_uncertainty_quantification(experiment_name: str):
+def rbf_uncertainty():
     """Function that calculates deep uncertainty based on
     radial basis function (RBF). It calculates uncertainty
     based on the distance to average centroids. It is a
     seperate testing module, since it predicts its own labels.
-
-    Args:
-        experiment_name: name of the model to run DUQ on.
     """
-    # Setting up the device to run the model on
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
-
-    # Setting batch size
-    batch_size = 16
-
-    # Loading model and defining experiment name
-    model = torch.load(os.path.join("Results", "Experiment-Results",
-                                     experiment_name, "model.pth"), 
-                                     map_location = torch.device(device))
-    experiment_name = cutoff_date(experiment_name)
-
-    # Setting the type of dataset for DUQ
-    experiment_location = os.path.join("Experiments", experiment_name + ".json")
-    with open(experiment_location, "r") as file:
-        dataset = eval(json.load(file)["Dataset"])
-
-    # Setting the amount of classes
-    classes = dataset.n_classes
-
-    # Retrieving data loaders based on dataset type
-    data_loaders = get_data_loaders(batch_size, dataset = dataset)
-    val_loader = data_loaders["val"]
-    test_loader = data_loaders["test"]
-    
-    # Making a copy of the model with the classification layer cut off
-    # To form a model that outputs a feature map instead of a a class
-    feature_extractor = copy.deepcopy(model)
-    feature_extractor = cutoff_classification_layer(feature_extractor)
-
-    # Set model to evaluating
-    model.eval()
-    feature_extractor.eval()
-
-    # Creating a class dict for storing feature maps per class
-    class_dict = {}
-    for c in range(classes):
-        class_dict[c] = []
-
-    # Running model/feature extraction prediction on validation set
-    print("Calculating average centroids over validation data")
-    with torch.no_grad():
-        for inputs, _ in tqdm(val_loader):
-            inputs = inputs.to(device)
-
-            # Getting model output for the feature maps and the labels
-            model_output = model(inputs)
-            feature_maps = feature_extractor(inputs)
-            predicted_labels = model_output.argmax(dim=1)
-            
-            # Looping over feature maps and labels
-            for idx, feature_map in enumerate(feature_maps):
-                class_dict[predicted_labels[idx].item()].append(feature_map)
-
-    # Setting up class centroid dictionary
-    class_centroids = {}
-    for c in range(classes):
-        class_centroids[c] = []
-
-    # Calculating average feature maps for the predictions
-    for c_label, feature_maps in class_dict.items():
-        # Failsafe for if a class is not present in the validation set
-        # Which can happen with many class datasets, such as tinyImageNet
-        if feature_maps == []:
-            continue
-        summed_feature_maps = torch.zeros(feature_maps[0].shape).to(device)
-        for feature_map in feature_maps:
-            summed_feature_maps += feature_map
-        class_centroids[c_label] = summed_feature_maps / len(feature_maps)
-    
-    # Running model/feature extraction prediction on testing set
-    # The closest centroid is the predicted class of the model
-    distances = []
-    predicted_labels = []
-    img_paths = []
-    print("Comparing test data to average centroids")
-    with torch.no_grad():
-        for inputs, paths in tqdm(test_loader):
-            inputs = inputs.to(device)
-
-            # Getting feature maps and saving image paths
-            feature_maps = feature_extractor(inputs)
-            img_paths.append(paths)
-            
-            # Comparing each feature map to class centroids
-            for feature_map in feature_maps:
-                predicted_labels, distances = compare_feature_maps(feature_map, 
-                                                                   class_centroids,
-                                                                   predicted_labels,
-                                                                   distances)
-    # Basing the maximum distance on a difference of 1 in each feature
-    # of the feature map. With the minimum distance being 0
-    max_distance = np.prod(feature_map.shape)
-
-    # Calculating the uncertainty, based on the maximum distance
-    # This is not a good way to calculate uncertainty,
-    # The distances range from 400 when it is not the right class
-    # (Even when inserting images that are nothing like the dataset)
-    # and 70-140 when it is the right class, but comparing 400 to 
-    # 62720 does not give any indicative metric.
-    img_destination = os.path.join("Results", "Explainability-Results", "DUQ-" +
-                                    experiment_name)
-    remove_predicts(img_destination)
-    save_test_predicts(predicted_labels, img_paths, img_destination, val_loader.dataset)
-    img_paths = flatten_list(img_paths)
-    with open(os.path.join(img_destination, "results.txt"), "a") as file:
-        for idx, distance_list in enumerate(distances):
-            uncertainty = 1 - (min(distance_list) / max_distance)
-            file.write("Distance list = " + str(distance_list) + "\n")
-            file.write("N classes compared to = " + str(len(distance_list)) + "\n")
-            file.write("Image = " + img_paths[idx] + "\n")
-            file.write("Predicted label = " + str(predicted_labels[idx]) + "\n")
-            file.write("Uncertainty = " + str(uncertainty) + "\n\n")
-    file.close()
-
-
-def deep_ensemble_uncertainty():
-   # Hardest to implement? -> No clear library available
-   # Testing module, but can not import test_model due to circular imports
-    print("Not yet implemented")
-
-
-def rbf_uncertainty():
     # Setting up the device to run the model on
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
@@ -379,11 +293,12 @@ def rbf_uncertainty():
             print("Accuracy = " + str(round(mean_accuracy, 2)))
             print("F1 score = " + str(round(mean_f1_score, 2)))
 
-if __name__ == '__main__':
-    # Running DUQ on a model that has been through training phase
-    # if len(sys.argv) == 2 and os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
-    #     deep_uncertainty_quantification(sys.argv[1])
-    # else:
-    #     print("No valid experiment name given, exiting ...")
 
+def deep_ensemble_uncertainty():
+   # Hardest to implement? -> No clear library available
+   # Testing module, but can not import test_model due to circular imports
+    print("Not yet implemented")
+
+
+if __name__ == '__main__':
     rbf_uncertainty()
