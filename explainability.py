@@ -1,27 +1,15 @@
-import copy
 import captum
 from captum.attr import visualization as viz
-import json
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 from PIL import Image
 import torch
+import torch.nn as nn
 import torchvision.models
 import torchvision.transforms as T
-from tqdm import tqdm
 import warnings
-
-
-# Temproary imports for RBF DUQ
-from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
-from torchmetrics import Accuracy, F1Score
-from torch import nn, optim
-
-from utils import cutoff_date, get_data_loaders, get_transforms
-
-from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
 
 class RBF_model(nn.Module):
@@ -88,14 +76,25 @@ class RBF_model(nn.Module):
         self.N = update_f(self.N, labels_sum)
 
         # Calculating centroid sum
-        x = self.fe(inputs)
-        x = torch.einsum("ij, mnj->imn", x, self.kernels)
+        z = self.fe(inputs)
+        z = torch.einsum("ij, mnj->imn", z, self.kernels)
         labels = labels.unsqueeze(1).cpu()
-        x = x.type(torch.LongTensor)
-        centroid_sum = torch.einsum("ijk, il->jk", x, labels).to(self.device)
+        z = z.type(torch.LongTensor)
+        centroid_sum = torch.einsum("ijk, il->jk", z, labels).to(self.device)
 
         # Update m here
         self.m = update_f(self.m, centroid_sum)
+
+
+def cutoff_date(folder_name: str):
+    """This function takes a folder in the form of a string.
+    It cuts off the date and time from the end of the string.
+    This function expects the folder name to not be in a folder.
+
+    Args:
+        folder_name: Name of the folder.
+    """
+    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-17]
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
@@ -214,91 +213,7 @@ def gen_model_explainability(explain_func, model: torchvision.models,
     visualize_explainability(explainability_attr, img_paths, img_desintation)
 
 
-def rbf_uncertainty():
-    """Function that calculates deep uncertainty based on
-    radial basis function (RBF). It calculates uncertainty
-    based on the distance to average centroids. It is a
-    seperate testing module, since it predicts its own labels.
-    """
-    # Setting up the device to run the model on
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
-
-    # Loading model and defining experiment name
-    feature_extractor = mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)
-    feature_extractor.classifier = nn.Sequential(nn.Dropout(p = 0.2))
-    model = RBF_model(feature_extractor, 1280, 4, device)
-    model.to(device)
-
-    #data_loaders = get_data_loaders(transform = get_transforms("categorical"))
-    #data_loaders = get_data_loaders(transform = get_transforms("rand_augment"))
-    data_loaders = get_data_loaders(transform = get_transforms("no_augment"))
-
-    # Optimizer params taken from DUQ paper
-    optimizer = optim.SGD(model.parameters(), lr = 0.05, momentum = 0.9, weight_decay = 0.0005)
-    acc_metric = Accuracy(task = "multiclass", num_classes = 4).to(device)
-    f1_metric = F1Score(task = "multiclass", num_classes = 4).to(device)
-    criterion = nn.CrossEntropyLoss()
-
-    # Training loop:
-    for i in range(50):
-        print("Epoch = " + str(i))
-        for phase in ["train", "val"]:
-            if phase == "train":
-                model.train()
-                print("Training phase")
-            else:
-                model.eval()
-                print("Validation phase")
-            # Set model metrics to 0 and starting model timer
-            loss_over_epoch = 0
-            acc = 0
-            f1_score = 0
-            combined_labels = []
-            combined_labels_pred = []
-            for inputs, labels in tqdm(data_loaders[phase]):
-                with torch.set_grad_enabled(phase == "train"):
-                    optimizer.zero_grad()
-                    inputs = inputs.to(device)
-                    labels = labels.to(device)
-                    inputs.requires_grad_(True)
-
-                    # Forward pass
-                    model_output = model(inputs)
-                    predicted_labels = model_output.argmax(dim = 1)
-                    
-                    # Calculating loss and metrics
-                    loss = criterion(model_output, labels)
-                    acc += acc_metric(predicted_labels, labels).item()
-                    f1_score += f1_metric(predicted_labels, labels).item()
-
-                    if phase == "train":
-                        # Updating model weights
-                        loss.backward()
-                        optimizer.step()
-                        # Updating RBF centres
-                        inputs.requires_grad_(False)
-                        with torch.no_grad():
-                            model.eval()
-                            model.update_centres(inputs, labels)
-    
-                    loss_over_epoch += loss.item()
-                    combined_labels.append(labels)
-                    combined_labels_pred.append(predicted_labels)
-
-            # Printing performance metrics
-            mean_accuracy = (acc / len(data_loaders[phase]))
-            mean_f1_score = (f1_score / len(data_loaders[phase]))
-            print("Loss = " + str(round(loss_over_epoch, 2)))
-            print("Accuracy = " + str(round(mean_accuracy, 2)))
-            print("F1 score = " + str(round(mean_f1_score, 2)))
-
-
 def deep_ensemble_uncertainty():
    # Hardest to implement? -> No clear library available
    # Testing module, but can not import test_model due to circular imports
     print("Not yet implemented")
-
-
-if __name__ == '__main__':
-    rbf_uncertainty()

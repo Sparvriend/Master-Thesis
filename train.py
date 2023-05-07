@@ -19,8 +19,9 @@ def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
                 scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
                 tensorboard_writers: dict, epochs: int, pfm_flag: bool,
-                early_stop_limit: int, model_replacement_limit: int,
-                experiment_path: str, classes: int) -> tuple[nn.Module, list, list]:
+                rbf_flag: bool, early_stop_limit: int,
+                model_replacement_limit: int, experiment_path: str,
+                classes: int) -> tuple[nn.Module, list, list]:
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -38,6 +39,7 @@ def train_model(model: torchvision.models, device: torch.device,
         epochs: Number of epochs to train the model for.
         pfm_flag: Boolean deciding on whether to print performance
                   metrics to terminal.
+        rbf_flag: Boolean indicating DUQ usage.
         early_stop_limit: Number of epochs to wait before early stopping.
         model_replacement_limit: Number of epochs to wait before
                                  replacing model.
@@ -99,6 +101,12 @@ def train_model(model: torchvision.models, device: torch.device,
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
+
+                        # Optionally, update RBF centroids
+                        if rbf_flag == True:
+                            with torch.no_grad():
+                                model.eval()
+                                model.update_centres(inputs, labels)
 
                     # Adding the loss over the epoch and counting
                     # total images a prediction was made over
@@ -174,7 +182,7 @@ def run_experiment(experiment_name: str):
     # And transferring model to device
     model = hyp_dict["Model"]
     classes = data_loaders["train"].dataset.n_classes
-    set_classification_layer(model, classes)
+    model = set_classification_layer(model, classes, hyp_dict["RBF Flag"], device)
     model.to(device)
     
     # Recording total training time
@@ -189,6 +197,7 @@ def run_experiment(experiment_name: str):
                                                  tensorboard_writers,
                                                  hyp_dict["Epochs"], 
                                                  hyp_dict["PFM Flag"],
+                                                 hyp_dict["RBF Flag"],
                                                  hyp_dict["Early Limit"],
                                                  hyp_dict["Replacement Limit"],
                                                  experiment_path,

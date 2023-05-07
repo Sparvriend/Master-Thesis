@@ -30,6 +30,7 @@ from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
 
+from explainability import RBF_model
 
 class CustomCorruption:
     """This is a class that allows for the corrupt function to be joined in a
@@ -182,7 +183,8 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     file.close()
 
 
-def set_classification_layer(model: torchvision.models, classes: int):
+def set_classification_layer(model: torchvision.models, classes: int,
+                             rbf_flag: bool, device: torch.device):
     """This function changes the final classification layer
     from a PyTorch deep learning model to a X output classes version,
     depending on the datase. The function edits the model variable,
@@ -190,35 +192,35 @@ def set_classification_layer(model: torchvision.models, classes: int):
 
     Args: 
         model: This is a default model, with usually a lot more output classes.
+        classes: The amount of output classes for the model.
+        rbf_flag: Boolean for swapping the classification layer with an RBF layer
+        device: device on which the model is ran.
+    
+    Returns:
+        The model with the new classification layer.
     """
-    # Setting the classification layer
-    if model.__class__.__name__ == "MobileNetV2" or \
-       model.__class__.__name__ == "EfficientNet":
-        model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
-    elif model.__class__.__name__ == "ShuffleNetV2":
-        model.fc = nn.Linear(in_features = 1024, out_features = classes)
-    elif model.__class__.__name__ == "ResNet":
-        model.fc = nn.Linear(in_features = 512, out_features = classes)
-
-
-def cutoff_classification_layer(model: torchvision.models):
-    """This function removes the final classification layer
-    from a PyTorch deep learning model. Since the models
-    differ in how they are structured, this is variable.
-
-    Args: 
-        model: Model to cut the classification layer from.
-    """
-    if model.__class__.__name__ == "MobileNetV2" or \
-       model.__class__.__name__ == "ShuffleNetV2":
-        # For MobileNetV2 get a 1280x7x7x1 feature map
-        # For ShuffleNetV2 get a 1024x7x7x1 feature map
-        model = torch.nn.Sequential(*(list(model.children())[:-1]))
-    elif model.__class__.__name__ == "ResNet" or \
-        model.__class__.__name__ == "EfficientNet":
-        # For ResNet18 get a 512x7x7x1 feature map
-        # For EfficientNetB1 get a 1280x7x7x1 feature map
-        model = torch.nn.Sequential(*(list(model.children())[:-2]))
+    if rbf_flag == True:
+        if model.__class__.__name__ == "MobileNetV2" or \
+           model.__class__.__name__ == "EfficientNet":
+            model.classifier[1] = torch.nn.Identity()
+            out_features = 1280
+        elif model.__class__.__name__ == "ShuffleNetV2":
+            model.fc = torch.nn.Identity()
+            out_features = 1024
+        elif model.__class__.__name__ == "ResNet":
+            model.fc = torch.nn.Identity()
+            out_features = 512
+        # Setting the RBF model, based on the out features and classes
+        model = RBF_model(model, out_features, classes, device)
+    else:  
+        # Setting the classification layer
+        if model.__class__.__name__ == "MobileNetV2" or \
+           model.__class__.__name__ == "EfficientNet":
+            model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
+        elif model.__class__.__name__ == "ShuffleNetV2":
+             model.fc = nn.Linear(in_features = 1024, out_features = classes)
+        elif model.__class__.__name__ == "ResNet":
+             model.fc = nn.Linear(in_features = 512, out_features = classes)
     return model
 
 
@@ -446,17 +448,6 @@ def calculate_acc_std(experiment_list: list, path: str):
             com_res.write("Standard deviation of validation accuracy on final epoch: "
                           + str(np.mean(val_acc_fe)) + "\n")
             com_res.write("===========================================================\n")  
-
-
-def cutoff_date(folder_name: str):
-    """This function takes a folder in the form of a string.
-    It cuts off the date and time from the end of the string.
-    This function expects the folder name to not be in a folder.
-
-    Args:
-        folder_name: Name of the folder.
-    """
-    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-17]
 
 
 def plot_results(path: str, title: str):

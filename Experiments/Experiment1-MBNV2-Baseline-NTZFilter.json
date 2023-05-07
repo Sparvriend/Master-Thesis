@@ -10,6 +10,7 @@
     "Num Workers": "4",
     "Augmentation": "no_augment",
     "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
+    "RBF Flag": "False",
     "Early Limit": "10",
     "Replacement Limit": "0"
 }

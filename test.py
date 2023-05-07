@@ -9,9 +9,8 @@ from torch.utils.data import DataLoader
 import torchvision
 from tqdm import tqdm
 
-from utils import get_data_loaders, cutoff_date, save_test_predicts, \
-                  remove_predicts    
-from explainability import explainability_setup
+from utils import get_data_loaders, save_test_predicts, remove_predicts    
+from explainability import explainability_setup, cutoff_date
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 

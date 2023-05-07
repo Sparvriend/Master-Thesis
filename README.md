@@ -11,26 +11,17 @@
        -> Possibility: Blender  
        -> Possibility: Diffusion models  -> Better than GANS (Matias)
 * TODO: Finish explainability of the model  
-      -> Uncertainty prediction (DUQ)  
-          -> Think of a method of expressing the distance as uncertainty  
-                -> Other option: Define a model, define a RBF function and replace each Relu layer in the network with a rbf layer.
-                Information on how to replace all relu layers in the network by some other activation layer can be found here:
-                https://discuss.pytorch.org/t/how-to-replace-all-relu-activations-in-a-pretrained-network/31591/11
-                -> Create a function that takes a model as input, as well as a list of or single layer to replace in the model
-                and what to create it by. The function should then replace the layers in the model with the new layers.
-                This way any of the models that have been used so far can be used with DUQ. -> Place the RBF conversion function in explainability.py in the DUQ function.
-                -> It seems as if Matias in his email is saying that only the final Relu layer needs replacing, which is a much easier option.
-                -> Only use the RBF function in the network during interference time
-          -> Look into if KL-Divergence is a better metric than euclidean distance  
-              -> https://pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html  
-              -> https://machinelearningmastery.com/divergence-between-probability-distributions/  
+      -> Make a testing module for RBF model  
+      -> Cleanup RBF_model in explainability.py  
+      -> Find a way for the RBF models to more often get out of local minima  
       -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
       -> Convert Saliency Map to RGB  
+* TODO: Fix set_classification_layer in utils, it should be more automatic, less hardcoded  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
-* TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils)
+* TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)  
 * TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
-      -> other explain_model options should be taken from command line input           
+      -> other explain_model options should be taken from command line input         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
       -> Appears to be as fast as doing it on the CPU? (is device CPU?)  
@@ -78,6 +69,7 @@ The JSON configuration files are used to run experiments with different hyperpar
     Num workers: The amount of workers used for loading the data.
     Augmentation: The type of augmentation to use for online augmentation of the images. Choice of rand_augment, categorical, random_choice, auto_augment, no_augment and random_apply.
     PFM Flag: Performance metric recording flags, consists of a dictionary with two keys, Terminal, for printing results to the terminal and Tensorboard for recording results with tensorboard.
+    RBF Flag: DUQ model flag, if this flag is True, the model is converted to a version that supports Deep Uncertainty Quantification (DUQ).
     Early Limit: The maximum amount of epochs the model can be trained for without an improvement in the validation accuracy, before stopping early. If set to 0, early stopping is disabled
     Replacement Limit: The maximum amount of epochs a model can be trained for without an improvement in the validation accuracy, before the model is replaced with the previous best model. If set to 0, model replacement is disabled.
 
