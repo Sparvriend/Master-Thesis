@@ -22,7 +22,6 @@ class RBF_model(nn.Module):
     kernels = ?. Shape = [Fe out features, classes, fe out features]
     N = ?. Shape = [Classes]
     m = ?. Shape = [fe out features, classes]
-    # For MobileNetV2, fe out features is 1280
 
     The essence of DUQ is that it learns a set of centroids for each class,
     which it can then compare to new inputs during inference time. The

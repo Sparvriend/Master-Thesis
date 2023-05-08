@@ -1,16 +1,7 @@
 {
-    "Model": "mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)", 
-    "Criterion": "nn.CrossEntropyLoss()", 
-    "Optimizer": "optim.SGD(hyp_dict[\"Model\"].parameters(), lr = 0.001, momentum = 0.9, weight_decay = 0.001)",
-    "Scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"Optimizer\"], milestones = [150,200], gamma = 0.1)",
-    "Dataset": "TinyImageNet200Dataset",
-    "Epochs": "250",
-    "Batch Size": "32",
-    "Shuffle": "True",
-    "Num Workers": "4",
-    "Augmentation": "rand_augment",
-    "PFM Flag": "{\"Terminal\": False, \"Tensorboard\": True}",
-    "RBF Flag": "False",
-    "Early Limit": "50",
-    "Replacement Limit": "0"
+    "optimizer": "optim.SGD(hyp_dict[\"model\"].parameters(), lr = 0.001, momentum = 0.9, weight_decay = 0.001)",
+    "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [150,200], gamma = 0.1)",
+    "dataset": "TinyImageNet200Dataset",
+    "epochs": "250",
+    "early_limit": "50"
 }

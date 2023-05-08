@@ -8,6 +8,7 @@ from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
 import torchvision
 from tqdm import tqdm
+from types import SimpleNamespace
 
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
@@ -164,15 +165,13 @@ def run_experiment(experiment_name: str):
 
     # Retrieving hyperparameter dictionary
     hyp_dict = setup_hyp_dict(experiment_name)
+    args = SimpleNamespace(**hyp_dict)
 
     # Defining the train transforms
-    transform = get_transforms(hyp_dict["Augmentation"])
+    transform = get_transforms(args.augmentation)
     # Retrieving data loaders
-    data_loaders = get_data_loaders(hyp_dict["Batch Size"], 
-                                    hyp_dict["Shuffle"],
-                                    hyp_dict["Num Workers"],
-                                    transform,
-                                    hyp_dict["Dataset"])
+    data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
+                                    transform, args.dataset)
 
     # Setting up tensorboard writers and writing hyperparameters
     tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
@@ -180,26 +179,21 @@ def run_experiment(experiment_name: str):
 
     # Replacing the output classification layer with a N class version
     # And transferring model to device
-    model = hyp_dict["Model"]
+    model = args.model
     classes = data_loaders["train"].dataset.n_classes
-    model = set_classification_layer(model, classes, hyp_dict["RBF Flag"], device)
+    model = set_classification_layer(model, classes, args.RBF_flag, device)
     model.to(device)
     
     # Recording total training time
     training_start = time.time()
 
     # Training and saving model
-    model, c_labels, c_labels_pred = train_model(model, device, 
-                                                 hyp_dict["Criterion"],
-                                                 hyp_dict["Optimizer"],
-                                                 hyp_dict["Scheduler"],
-                                                 data_loaders, 
-                                                 tensorboard_writers,
-                                                 hyp_dict["Epochs"], 
-                                                 hyp_dict["PFM Flag"],
-                                                 hyp_dict["RBF Flag"],
-                                                 hyp_dict["Early Limit"],
-                                                 hyp_dict["Replacement Limit"],
+    model, c_labels, c_labels_pred = train_model(model, device, args.criterion,
+                                                 args.optimizer, args.scheduler,
+                                                 data_loaders, tensorboard_writers,
+                                                 args.epochs, args.PFM_flag,
+                                                 args.RBF_flag, args.early_limit,
+                                                 args.replacement_limit,
                                                  experiment_path,
                                                  classes)
     
@@ -247,6 +241,7 @@ def setup():
             if file.endswith(".json"):
                 experiment_list.append(file[:-5])
         experiment_list.remove("TestAugments")
+        experiment_list.remove("DEFAULT")
 
         print("No experiment name given, running all experiments 5 times")
         for _ in range(5):

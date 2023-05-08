@@ -2,26 +2,23 @@
 
 ## TODO in order of priority
 * TODO: Create synthetic data  
-       -> Possibility: Procedural (in synthetic_data.py)  
+      -> Possibility: Procedural (in synthetic_data.py)  
             -> TODO: Fix angled rectangle mapping  
             -> Alternative: Use a model like MASK-RCNN to detect filter bounding boxes  
-       -> Possibility: GANs -> Combine with CIFAR100?  
+      -> Possibility: GANs -> Combine with CIFAR100?  
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
-       -> Possibility: Blender  
-       -> Possibility: Diffusion models  -> Better than GANS (Matias)
+      -> Possibility: Blender  
+      -> Possibility: Diffusion models  -> Better than GANS (Matias)
 * TODO: Finish explainability of the model  
-      -> Make a testing module for RBF model  
       -> Cleanup RBF_model in explainability.py  
       -> Find a way for the RBF models to more often get out of local minima  
       -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
       -> Convert Saliency Map to RGB  
-* TODO: Fix set_classification_layer in utils, it should be more automatic, less hardcoded  
+      -> Look into using adverserial attacks for explainability  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
-* TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)  
-* TODO: Fix test.py arguments, --explain_model should be optional, with "integrated_gradients" default value  
-      -> other explain_model options should be taken from command line input         
+* TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
       -> Report only GPU fps  
       -> Appears to be as fast as doing it on the CPU? (is device CPU?)  
@@ -34,9 +31,11 @@
       -> Manual labelling of each date on the filter  
       -> East Detector  
       -> Do a short visibility study if it turns out to be too complicated  
+* TODO: Burn-in MCMC method for DUQ?  
+
 
 ## Optional TODOs
-* OPTIONAL: Do a rerun of PEP8 in all files 
+* OPTIONAL: Do a rerun of PEP8 in all files  
 * OPTIONAL: Make a jupyter notebook implementation of some of the code, so that is can easily be shown off to others  
 * OPTIONAL: Use 3D plots with color to represent results     
 * OPTIONAL: Test all code with laptop to see if it works without CUDA  

@@ -51,7 +51,7 @@ def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
 
 
 def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader,
-               img_destination: str):
+               img_destination: str, rbf_flag: bool):
     """Function that tests the feature model on the test dataset.
     It runs through a forward pass to get the model output and saves the
     output images to appropriate directories through the save_test_predicts
@@ -61,7 +61,8 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
         model: The model to test.
         device: The device which data/model is present on.
         data_loader: The data loader contains the data to test on.
-        img_destination: Designated folder to save images to.
+        img_destination: Designated  folder to save images to.
+        rbf_flag: If true, the model is a RBF model.
     Returns:
         Lists of predicted labels and the image paths.
         Concatenated inputs.
@@ -73,6 +74,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     # Creating a list of paths and predicted labels
     # and starting the timer
     predicted_labels = []
+    predicted_uncertainty = []
     img_paths = []
     test_start = time.time()
     input_concat = torch.empty((0,)).to(device)
@@ -86,6 +88,9 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
             model_output = model(inputs)
             predicted_labels.append(model_output.argmax(dim=1))
             img_paths.append(paths)
+
+            if rbf_flag == True:
+                predicted_uncertainty.append(model_output.max(dim=1)[0])
     
             # Counting up total amount of images a prediction was made over
             total_imgs += len(inputs)
@@ -98,19 +103,21 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     testing_time = time.time() - test_start
     print("FPS = " + str(round(total_imgs / testing_time, 2)))
     prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths,
-                                                         img_destination, data_loader.dataset)
+                                                         img_destination, data_loader.dataset,
+                                                         predicted_uncertainty)
 
     return prediction_list, img_paths_list, input_concat
 
 
 def setup_testing(experiment_folder: str, convert_trt: bool = False, 
-                  explain_model: bool = False):
+                  explain_model: str = None):
     """Function that sets up dataloader, transforms and loads in the model
     for testing. 
 
     Args: 
         experiment_folder: The folder with a model.pth file
         convert_trt: If true, the model is converted to tensorRT.
+        explain_model: Contains a string with the model explanation type
     Returns:
         The model, the dataloader and the device.
         For usage in explainability.py
@@ -148,7 +155,9 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     # Setting the type of dataset for testing
     experiment_location = os.path.join("Experiments", experiment_name + ".json")
     with open(experiment_location, "r") as file:
-        dataset = eval(json.load(file)["Dataset"]) 
+        json_file = json.load(file)
+        dataset = eval(json_file["Dataset"])
+        rbf_flag = eval(json_file["RBF Flag"])
 
     # Creating the dataset and transferring to a DataLoader
     test_loader = get_data_loaders(batch_size, dataset = dataset)["test"]
@@ -161,17 +170,17 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
 
     # Testing the model on testing data
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
-                                                           img_destination)
+                                                           img_destination, rbf_flag)
 
     # Optionally, explain the model using integrated gradients
     # Reduce the amount of images to explain, since doing it with too many
     # Causes CUDA out of memory errors
-    if explain_model:
+    if explain_model != None:
         if len(img_paths) > 100:
             img_paths = img_paths[:100]
             input_concat = input_concat[:100]
             predicted_labels = predicted_labels[:100]
-        explainability_setup(model, img_paths, "guided_backpropagation", device,
+        explainability_setup(model, img_paths, explain_model, device,
                              input_concat, predicted_labels, experiment_folder)
 
 if __name__ == '__main__':
@@ -186,6 +195,8 @@ if __name__ == '__main__':
     # booleans for convert_trt and explain_model
     parser = argparse.ArgumentParser()
     parser.add_argument("--convert_trt", action = argparse.BooleanOptionalAction)
-    parser.add_argument("--explain_model", action = argparse.BooleanOptionalAction)
+    parser.add_argument("--explain_model", default = None, const = "integrated_gradients",
+                        nargs = "?", choices = ["integrated_gradients", "saliency_map",
+                                                "deeplift", "guided_backpropagation"])
     args = parser.parse_args(sys.argv[2:])
     setup_testing(sys.argv[1], args.convert_trt, args.explain_model)

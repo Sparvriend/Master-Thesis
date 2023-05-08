@@ -183,44 +183,59 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     file.close()
 
 
+def find_classification_module(model: torchvision.models):
+    """Function that takes in a model and finds the classification layer.
+    An assumption is made that the linear layer is either directly located in
+    a layer called fc or in a sub module in a layer called classifier.
+
+    Args:
+        model: PyTorch deep learning model
+    Returns:
+        The classification module of the model, its name
+        and an index of its location if necessary.
+    """
+    idx = None
+    for name, module in model.named_children():
+        # For models that have the linear layer in a sub module "classifier"
+        # (MobileNetV2 and EfficientNetB1 have this)
+        if name == "classifier":
+            idx = 0
+            for _, sub_module in module.named_children():
+                if isinstance(sub_module, nn.Linear):
+                    return name, sub_module, idx
+                idx += 1
+        # For models that have a linear layer in a module "fc".
+        # (Resnet18 and ShuffleNetV2 have this)
+        elif name == "fc" and isinstance(module, nn.Linear):
+            return name, module, idx
+    raise ValueError("No linear layer module found in model.")
+
+
 def set_classification_layer(model: torchvision.models, classes: int,
                              rbf_flag: bool, device: torch.device):
     """This function changes the final classification layer
     from a PyTorch deep learning model to a X output classes version,
-    depending on the datase. The function edits the model variable,
-    so no need to return it.
+    depending on the dataset. It also converts to DUQ if rbf_flag is True.
 
     Args: 
         model: This is a default model, with usually a lot more output classes.
         classes: The amount of output classes for the model.
-        rbf_flag: Boolean for swapping the classification layer with an RBF layer
+        rbf_flag: Boolean for swapping the classification layer with an RBF layer.
         device: device on which the model is ran.
     
     Returns:
         The model with the new classification layer.
     """
+    name, module, idx = find_classification_module(model)
+    in_features = module.in_features
     if rbf_flag == True:
-        if model.__class__.__name__ == "MobileNetV2" or \
-           model.__class__.__name__ == "EfficientNet":
-            model.classifier[1] = torch.nn.Identity()
-            out_features = 1280
-        elif model.__class__.__name__ == "ShuffleNetV2":
-            model.fc = torch.nn.Identity()
-            out_features = 1024
-        elif model.__class__.__name__ == "ResNet":
-            model.fc = torch.nn.Identity()
-            out_features = 512
-        # Setting the RBF model, based on the out features and classes
-        model = RBF_model(model, out_features, classes, device)
-    else:  
-        # Setting the classification layer
-        if model.__class__.__name__ == "MobileNetV2" or \
-           model.__class__.__name__ == "EfficientNet":
-            model.classifier[1] = nn.Linear(in_features = 1280, out_features = classes)
-        elif model.__class__.__name__ == "ShuffleNetV2":
-             model.fc = nn.Linear(in_features = 1024, out_features = classes)
-        elif model.__class__.__name__ == "ResNet":
-             model.fc = nn.Linear(in_features = 512, out_features = classes)
+        if idx != None:
+            model._modules[name][idx] = torch.nn.Identity()
+        else:
+            model._modules[name] = torch.nn.Identity()
+        model = RBF_model(model, in_features, classes, device)
+    else:
+        model._modules[name] = nn.Linear(in_features = in_features, out_features = classes)
     return model
 
 
@@ -281,7 +296,8 @@ def remove_predicts(path):
 
 
 def save_test_predicts(predicted_labels: list, paths: list,
-                       img_destination: str, dataset: Dataset):
+                       img_destination: str, dataset: Dataset,
+                       predicted_uncertainty: list) -> tuple[list, list]:
     """Function that converts labels to a list and then saves paths and labels
     to appropriate prediction directories. The prediction directory in
     img_destination, should already exist, when running remove_predicts
@@ -292,6 +308,8 @@ def save_test_predicts(predicted_labels: list, paths: list,
         paths: list of lists with paths (strings) to images.
         img_destination: Designated folder to save images to.
         dataset: The dataset the predictions are made for.
+        predicted_uncertainty: list of tensors with predicted uncertainty
+        if empty, the model is not an rbf model.
     
     Returns:
         Prediction list and paths converted to correct format
@@ -305,7 +323,7 @@ def save_test_predicts(predicted_labels: list, paths: list,
     # Getting the dataset label map
     label_dict = dataset.label_map
 
-    if dataset == NTZFilterDataset:
+    if isinstance(dataset, NTZFilterDataset):
         text_loc = (50, 10)
         text_size = 18
     else:
@@ -322,6 +340,21 @@ def save_test_predicts(predicted_labels: list, paths: list,
         font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
         draw = ImageDraw.Draw(img)
         draw.text(text_loc, label_name, font = font, fill = 255)
+
+        # Adding uncertainty in a white block if RBF model
+        if len(predicted_uncertainty) != 0:
+            if type(predicted_uncertainty[0]) == torch.Tensor:
+                predicted_uncertainty = convert_to_list(predicted_uncertainty)
+            uncertainty = round(predicted_uncertainty[idx], 2)
+
+            width, height = img.size
+            bar_height = text_size
+            bar_img = Image.new("RGB", (width, height + bar_height), color = "white")
+            bar_img.paste(img, (0, 0))
+            draw = ImageDraw.Draw(bar_img)
+            draw.text((0, height), "Uncertainty = " + str(uncertainty), font = font, fill = 255)
+            img = bar_img
+
         img.save(os.path.join(img_destination, name))
 
     return predicted_labels, paths
@@ -362,15 +395,27 @@ def setup_hyp_file(writer: SummaryWriter, hyp_dict: dict):
 def setup_hyp_dict(experiment_name: str) -> dict:
     """This function retrieves the hyperparameters from the JSON file and
     sets them up in a dictionary from which the hyperparameters can be used.
+    It replaces default hyperparameters with the ones from a JSON file.
 
     Args:
         experiment_name: Name of the experiment that is run.
     Returns:
         Dictionary with hyperparameters.
     """
+    # First getting all default arguments from DEFAULT.json
+    experiment_location = os.path.join("Experiments", "DEFAULT.json")
+    with open(experiment_location, "r") as f:
+        def_dict = json.load(f)
+
+    # Getting arguments from the experiment
     experiment_location = os.path.join("Experiments", (experiment_name + ".json"))
     with open(experiment_location, "r") as f:
-        hyp_dict = json.load(f)
+        exp_dict = json.load(f)
+
+    # Comparing the two dictionaries and replacing default values with
+    # values from the experiment if they exist.
+    hyp_dict = def_dict.copy()
+    hyp_dict.update(exp_dict)
 
     # Evaluating the string expressions in the JSON experiment setup file
     for key, value in hyp_dict.items():
