@@ -37,7 +37,7 @@ class RBF_model(nn.Module):
         self.device = device
 
         # Initializing kernels and centroids
-        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features)).to(device)
+        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features))
         self.N = (torch.zeros(out_features) + 13).to(device) # (Why did Joost set this value to 13?)
         self.m = torch.zeros(in_features, out_features).to(device)
         self.m *= self.N
@@ -49,7 +49,7 @@ class RBF_model(nn.Module):
     def forward(self, x):
         # Getting feature output from fe and then applying kernels
         z = self.fe(x)
-        z = torch.einsum("ij, mnj->imn", z, self.kernels).to(self.device)
+        z = torch.einsum("ij, mnj->imn", z, self.kernels)
 
         # Getting embedded centres
         c = (self.m / self.N.unsqueeze(0)).unsqueeze(0).to(self.device)
@@ -83,6 +83,56 @@ class RBF_model(nn.Module):
 
         # Update m here
         self.m = update_f(self.m, centroid_sum)
+
+
+def get_gradients(inputs, model_output):
+    """Function that calculates a gradients for model inputs,
+    given the predicted output.
+
+    Args:
+        inputs: Model inputs.
+        model_output: Predicted labels given input.
+    """
+    print(model_output.shape)
+    print(inputs.shape)
+    gradients = torch.autograd.grad(model_output, inputs,
+                                    grad_outputs = torch.ones_like(model_output),
+                                    create_graph = True)[0]
+    return gradients.flatten(start_dim = 1)
+
+
+def get_grad_pen(inputs, model_output):
+    """Function that calculates the gradient penalty
+    based on the gradients of the inputs, its L2 norm,
+    applying the two sided penalty and the gradient
+    penalty constant. Taken from Joost van Amersfoort
+    paper on DUQ (2020).
+
+    Args:
+        inputs: Model inputs.
+        model_output: Predicted labels given input.
+    """
+    # Gradient penalty constant, taken from DUQ paper
+    gp_const = 0.75
+
+    # First getting gradients
+    gradients = get_gradients(inputs, model_output)
+
+    # Then computing L2 norm
+    #L2_norm = torch.linalg.norm(gradients, ord = 2, dim = 1)
+    L2_norm = gradients.norm(2, dim = 1)
+    print(gradients)
+    print(gradients.shape)
+    print(gradients[0].norm(2))
+    print(L2_norm)
+    print(L2_norm.shape)
+
+    # Applying the 2 sided penalty
+    grad_pen = (((L2_norm - 1)**2))
+    print(grad_pen)
+    exit()
+
+    return grad_pen * gp_const
 
 
 def cutoff_date(folder_name: str):

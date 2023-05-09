@@ -138,7 +138,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     
     # Getting experiment_name and creating the folder to paste the images in
     experiment_name = cutoff_date(experiment_folder)
-    img_destination = os.path.join("Results", "Test-Predictions", experiment_name)
+    img_destination = os.path.join("Results", "Test-Predictions", experiment_folder)
 
     # Removing all old predictions that might be present
     # in the prediction folder
@@ -152,12 +152,23 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     if model.__class__.__name__ == "ShuffleNetV2":
         batch_size = 1
 
+    # Taking default parameters from default experiment
+    experiment_location = os.path.join("Experiments", "DEFAULT.json")
+    with open(experiment_location, "r") as f:
+        def_dict = json.load(f)
+
     # Setting the type of dataset for testing
     experiment_location = os.path.join("Experiments", experiment_name + ".json")
-    with open(experiment_location, "r") as file:
-        json_file = json.load(file)
-        dataset = eval(json_file["Dataset"])
-        rbf_flag = eval(json_file["RBF Flag"])
+    with open(experiment_location, "r") as f:
+        exp_dict = json.load(f)
+    
+    # Copying default parameters to experiment
+    hyp_dict = def_dict.copy()
+    hyp_dict.update(exp_dict)
+
+    # Getting dataset and default values
+    dataset = eval(hyp_dict["dataset"])
+    rbf_flag = eval(hyp_dict["RBF_flag"])
 
     # Creating the dataset and transferring to a DataLoader
     test_loader = get_data_loaders(batch_size, dataset = dataset)["test"]

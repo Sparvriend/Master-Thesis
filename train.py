@@ -10,6 +10,7 @@ import torchvision
 from tqdm import tqdm
 from types import SimpleNamespace
 
+from explainability import get_grad_pen
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
@@ -88,6 +89,7 @@ def train_model(model: torchvision.models, device: torch.device,
                     labels = labels.to(device)
 
                     optimizer.zero_grad()
+                    inputs.requires_grad_(True) if rbf_flag else None
 
                     # Getting model output and labels
                     model_output = model(inputs)
@@ -100,9 +102,15 @@ def train_model(model: torchvision.models, device: torch.device,
                     
                     # Updating model weights if in training phase
                     if phase == "train":
+                        # Optionally, add L2 gradient penalty to RBF loss
+                        if rbf_flag == True:
+                            grad_pen = get_grad_pen(inputs, model_output)
+                            loss += grad_pen
+
                         loss.backward()
                         optimizer.step()
 
+                        inputs.requires_grad_(False) if rbf_flag else None
                         # Optionally, update RBF centroids
                         if rbf_flag == True:
                             with torch.no_grad():

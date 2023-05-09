@@ -1,7 +1,7 @@
 {
     "optimizer": "optim.SGD(hyp_dict[\"model\"].parameters(), lr = 0.05, momentum = 0.9, weight_decay = 0.0005)",
-    "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [150,200], gamma = 0.1)",
-    "epochs": "250",
+    "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [40,50], gamma = 0.1)",
+    "epochs": "60",
     "RBF_flag": "True",
-    "early_limit": "20"
+    "early_limit": "15"
 }
