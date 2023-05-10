@@ -44,6 +44,10 @@
 
 To open tensorboard in browser, run the following command in a new terminal: tensorboard --logdir=Master-Thesis-Experiments
 
+### RBF model learning rates
+
+Due to the L2 two sided gradient penalty that is applied to RBF models, the vanishing gradient problem can occur, since the penalty can cause the gradients to be updated too aggresively. To mitigate this, the learning rate has to be set to a smaller value. For example the ResNet18 model, a learning rate of 0.01 is too high and causes vanishing gradients already after a few batches. The limit on which this tends to occur for ResNet18 is at a learning rate of 0.001. Another solution to this problem is to not use the pretrained weights for the models; these weights are too small and cause the vanishing gradients problem when updated aggresively. It should be noted that the vanishing gradients problem does not occur in Joost van Amersfoorts version of DUQ, even when using a high learning rate in combination with pretrained weights.
+
 
 ### Class definition for the NTZFilterDataset
 

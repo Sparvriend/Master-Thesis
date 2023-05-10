@@ -88,6 +88,7 @@ def train_model(model: torchvision.models, device: torch.device,
                     inputs = inputs.to(device)
                     labels = labels.to(device)
 
+                    # Removing gradients from previous batch
                     optimizer.zero_grad()
                     inputs.requires_grad_(True) if rbf_flag else None
 
@@ -176,7 +177,7 @@ def run_experiment(experiment_name: str):
     args = SimpleNamespace(**hyp_dict)
 
     # Defining the train transforms
-    transform = get_transforms(args.augmentation)
+    transform = get_transforms(args.dataset, args.augmentation)
     # Retrieving data loaders
     data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
                                     transform, args.dataset)

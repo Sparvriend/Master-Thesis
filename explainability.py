@@ -93,9 +93,7 @@ def get_gradients(inputs, model_output):
         inputs: Model inputs.
         model_output: Predicted labels given input.
     """
-    print(model_output.shape)
-    print(inputs.shape)
-    gradients = torch.autograd.grad(model_output, inputs,
+    gradients = torch.autograd.grad(outputs = model_output, inputs = inputs,
                                     grad_outputs = torch.ones_like(model_output),
                                     create_graph = True)[0]
     return gradients.flatten(start_dim = 1)
@@ -117,20 +115,13 @@ def get_grad_pen(inputs, model_output):
 
     # First getting gradients
     gradients = get_gradients(inputs, model_output)
+    #print(gradients)
 
-    # Then computing L2 norm
-    #L2_norm = torch.linalg.norm(gradients, ord = 2, dim = 1)
+    # Then computing L2 norm (2 sided)
     L2_norm = gradients.norm(2, dim = 1)
-    print(gradients)
-    print(gradients.shape)
-    print(gradients[0].norm(2))
-    print(L2_norm)
-    print(L2_norm.shape)
 
     # Applying the 2 sided penalty
-    grad_pen = (((L2_norm - 1)**2))
-    print(grad_pen)
-    exit()
+    grad_pen = ((L2_norm - 1) ** 2).mean()
 
     return grad_pen * gp_const
 

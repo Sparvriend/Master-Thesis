@@ -541,21 +541,35 @@ def plot_results(path: str, title: str):
     plt.savefig(os.path.join(path, title + ".png"))
 
 
-def get_default_transform() -> T.Compose:
-    """This function returns a default transformation.
-    The transformation like this is used for validation/testing set.
+def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
+    """This function returns a default transformation based on the
+    type of dataset. The transformation like this is used for
+    validation/testing set.
 
     Returns:
         Composed elemenent of PyTorch transforms.
-        Based on MobileNetV2 PyTorch transforms.
     """
-    transform = T.Compose([
-        T.Resize(256),
-        T.CenterCrop(224),
-        T.ToTensor(),
-        T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
-    ])
-
+    if dataset.__name__ == "NTZFilterDataset":
+        # Based on MobileNetV2 default transforms
+        # Resizing because the images are quite large and not square
+        transform = T.Compose([
+            T.Resize(256),
+            T.CenterCrop(224),
+            T.ToTensor(),
+            T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
+        ])
+    elif dataset.__name__ == "CIFAR10Dataset":
+        transform = T.Compose([
+            T.RandomCrop(32, padding = 4),
+            T.ToTensor(),
+            T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010]),
+        ])
+    elif dataset.__name__ == "TinyImageNet200Dataset":
+        transform = T.Compose([
+            T.RandomCrop(64, padding = 4),
+            T.ToTensor(),
+            T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262]),
+        ])
     return transform
 
 
@@ -619,7 +633,8 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
     return combined_transforms, categorical_transforms
 
 
-def get_transforms(transform_type: str = "categorical") -> T.Compose:
+def get_transforms(dataset: Dataset = NTZFilterDataset,
+                   transform_type: str = "categorical") -> T.Compose:
     """Function that retrieves transforms and combines them into a compose
     element based on which option is selected. The augmentations should only
     be randomized by RandomApply/RandomChoice, not by any random probability
@@ -630,6 +645,8 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
         transform_type: The type of transform to be used. Options are
                         "random_choice", "categorical", "auto_augment" and
                         "rand_augment".
+        dataset: Type of dataset. Options are "NTZFilterDataset", "CIFAR10",
+                 and TinyImageNet200.        
     Returns:
         Composed element of transforms.
     """
@@ -642,7 +659,7 @@ def get_transforms(transform_type: str = "categorical") -> T.Compose:
                          "random_apply": T.RandomOrder(combined_transforms)}
 
     # Getting default transform and inserting selected transform type
-    transform = get_default_transform()
+    transform = get_default_transform(dataset)
     transform.transforms.insert(0, transform_options[transform_type])
 
     return transform
