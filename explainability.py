@@ -111,11 +111,10 @@ def get_grad_pen(inputs, model_output):
         model_output: Predicted labels given input.
     """
     # Gradient penalty constant, taken from DUQ paper
-    gp_const = 0.75
+    gp_const = 0.5
 
     # First getting gradients
     gradients = get_gradients(inputs, model_output)
-    #print(gradients)
 
     # Then computing L2 norm (2 sided)
     L2_norm = gradients.norm(2, dim = 1)

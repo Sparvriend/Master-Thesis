@@ -75,7 +75,7 @@ class CIFAR10Dataset(ProjDataset):
         # Setting the proportion of the dataset to use, since 40k
         # train and 10k validation is way too much
         if self.data_type == "train" or self.data_type == "val":
-            self.prop = 0.01
+            self.prop = 1
         elif self.data_type == "test":
             self.prop = 0.0003
 
@@ -87,7 +87,7 @@ class CIFAR10Dataset(ProjDataset):
 
         # Setting image paths and training labels
         # Randomly sampling like this does not ensure an equal amount of images
-        # per class, but since it will likely not be used further, it is fine.
+        # If self.prop = 1, then this randomly shuffles the data
         files = os.listdir(self.data_path)
         files = random.sample(files, int(len(files) * self.prop))
         for file in files:

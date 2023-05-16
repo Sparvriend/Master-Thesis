@@ -1,5 +1,5 @@
 {
     "dataset": "CIFAR10Dataset",
-    "epochs": "120",
-    "early_limit": "0"    
+    "epochs": "100",
+    "batch_size": "128"
 }

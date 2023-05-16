@@ -5,7 +5,6 @@
     "dataset": "CIFAR10Dataset",
     "epochs": "100",
     "batch_size": "128",
-    "augmentation": "auto_augment",
     "RBF_flag": "True",
     "early_limit": "0"
 }

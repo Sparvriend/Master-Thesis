@@ -57,7 +57,7 @@ def train_model(model: torchvision.models, device: torch.device,
     early_stop = 0
     model_replacement = 0
 
-    old_acc = 0
+    old_loss = 1000
     van_grad = False
 
     # Setting up performance metrics
@@ -93,7 +93,7 @@ def train_model(model: torchvision.models, device: torch.device,
 
                     # Removing gradients from previous batch
                     optimizer.zero_grad()
-                    #inputs.requires_grad_(True) if rbf_flag else None
+                    inputs.requires_grad_(True) if rbf_flag else None
 
                     # Getting model output and labels
                     model_output = model(inputs)
@@ -107,14 +107,14 @@ def train_model(model: torchvision.models, device: torch.device,
                     # Updating model weights if in training phase
                     if phase == "train":
                         # Optionally, add L2 gradient penalty to RBF loss
-                        #if rbf_flag == True:
-                        #    grad_pen = get_grad_pen(inputs, model_output)
-                        #    loss += grad_pen
+                        if rbf_flag == True:
+                            grad_pen = get_grad_pen(inputs, model_output)
+                            loss += grad_pen
 
                         loss.backward()
                         optimizer.step()
 
-                        #inputs.requires_grad_(False) if rbf_flag else None
+                        inputs.requires_grad_(False) if rbf_flag else None
                         # Optionally, update RBF centroids
                         if rbf_flag == True:
                             with torch.no_grad():
@@ -134,17 +134,17 @@ def train_model(model: torchvision.models, device: torch.device,
             report_metrics(pfm_flag, start_time, len(data_loaders[phase]), acc,
                            f1_score, loss_over_epoch, total_imgs, writer, i,
                            experiment_path)
-            if old_acc > acc + 0.55:
+            if phase == "val" and loss_over_epoch > old_loss + 10:
                 # If this happens, vanishing gradient problem likely occured
                 print("Phase = " + str(phase))
-                print("Old acc = " + str(old_acc))
-                print("New acc = " + str(acc))
+                print("Old loss = " + str(old_loss))
+                print("New loss = " + str(loss))
                 print("Epoch = " + str(i))
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         print(name, param.data)
                 van_grad = True
-            old_acc = (acc / len(data_loaders[phase]))
+            old_loss = loss_over_epoch
             
             if phase == "val":
                 # Change best model to new model if validation loss is better
@@ -176,7 +176,7 @@ def train_model(model: torchvision.models, device: torch.device,
         for name, param in model.named_parameters():
             if param.requires_grad:
                 print(name, param.data)
-        exit()
+
     return model, combined_labels, combined_labels_pred
 
 

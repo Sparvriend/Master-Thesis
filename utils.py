@@ -560,13 +560,11 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
         ])
     elif dataset.__name__ == "CIFAR10Dataset":
         transform = T.Compose([
-            T.RandomCrop(32, padding = 4),
             T.ToTensor(),
             T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010]),
         ])
     elif dataset.__name__ == "TinyImageNet200Dataset":
         transform = T.Compose([
-            T.RandomCrop(64, padding = 4),
             T.ToTensor(),
             T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262]),
         ])
@@ -690,7 +688,7 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
     test_path = os.path.join(dataset_path, "test")
 
     # Getting default transform
-    default_transform = get_default_transform()
+    default_transform = get_default_transform(dataset)
 
     # Creating datasets for training/validation/testing
     # based on NTZFilterDataset class.

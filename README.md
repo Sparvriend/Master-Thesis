@@ -11,8 +11,9 @@
       -> Possibility: Blender  
       -> Possibility: Diffusion models  -> Better than GANS (Matias)
 * TODO: Finish explainability of the model  
+      -> Check if vanishing gradients still occurs for RBF model without gradient penalty
+      -> Fix gradient penalty (loss does not decrease from epoch 0, stays 181.9 across model runs)
       -> Cleanup RBF_model in explainability.py  
-      -> Find a way for the RBF models to more often get out of local minima  
       -> Deep Ensembles Uncertainty    
       -> Look into adding augmentation to uncertainty methods  
       -> Convert Saliency Map to RGB  
@@ -31,7 +32,6 @@
       -> Manual labelling of each date on the filter  
       -> East Detector  
       -> Do a short visibility study if it turns out to be too complicated  
-* TODO: Burn-in MCMC method for DUQ?  
 
 
 ## Optional TODOs
