@@ -1,3 +1,5 @@
 {
-    "dataset": "CIFAR10Dataset"
+    "dataset": "CIFAR10Dataset",
+    "epochs": "120",
+    "early_limit": "0"    
 }
