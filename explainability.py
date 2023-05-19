@@ -1,31 +1,63 @@
+import argparse
 import captum
 from captum.attr import visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import sys
 from PIL import Image
 import torch
 import torch.nn as nn
 import torchvision.models
 import torchvision.transforms as T
+from types import SimpleNamespace
 import warnings
+
+from train import train_model
+from test import setup_testing, test_model
+from utils import get_transforms, get_data_loaders, setup_tensorboard, \
+                  setup_hyp_file, set_classification_layer, \
+                  add_confusion_matrix, setup_hyp_dict, merge_experiments, \
+                  save_test_predicts
 
 
 class RBF_model(nn.Module):
-    """RBF layer definition taken from Joost van Amersfoort's implementation of DUQ:
+    """RBF layer definition based on Joost van Amersfoort's implementation
+    of Determenistic Uncertainty Quantification (DUQ):
     https://github.com/y0ast/deterministic-uncertainty-quantification/blob/master/utils/resnet_duq.py
-    and inspired by Matias Valdenegro Toro implementation:
+    and further inspired by Matias Valdenegro Toro implementation:
     https://github.com/mvaldenegro/keras-uncertainty/blob/master/keras_uncertainty/layers/rbf_layers.py
 
     Variable explanations:
-    kernels = ?. Shape = [Fe out features, classes, fe out features]
-    N = ?. Shape = [Classes]
-    m = ?. Shape = [fe out features, classes]
+    out_features is the amount of classes of the model.
+    in_features is the amount of features inserted into an RBF layer by the model.
+
+    [kernels] holds the representation of conversion to a feature space.
+    Any time an output of the feature extractor is calculated it is first
+    matrix multiplied (einsum) with the kernels to get a feature space
+    representation of the feature extractor output. A parameter of the
+    model, hence updated every backwards pass.
+    Shape = [in features, classes, in features]
+
+    [N] holds the label counts multiplied by the constant gamma. In essence
+    it holds the frequency of each label relative to the other labels.
+    Shape = [classes]
+
+    [m] holds the centroid sum multiplied by the constant gamma. The centroid sum
+    consists of feature extractor output, combined through matrix multiplication
+    (einsum) with the kernels. The result is then again combined (einsum) with 
+    the labels to get a sum of the feature extractor output for each label;
+    the centroid sum.
+    Shape = [in features, classes]
+
+    [m / N] Gives the centroids, it applies the relative label frequency
+    of N to m.
+    Shape = [in features, classes]
 
     The essence of DUQ is that it learns a set of centroids for each class,
     which it can then compare to new inputs during inference time. The
-    distance to the closest centroid is the uncertainty score.
+    distance to the closest centroid is the uncertainty metric.
     """
     def __init__(self, fe, in_features, out_features, device):
         super(RBF_model, self).__init__()
@@ -36,14 +68,15 @@ class RBF_model(nn.Module):
         self.fe = fe
         self.device = device
 
-        # Initializing kernels and centroids
-        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features, in_features))
-        self.N = (torch.zeros(out_features) + 13).to(device) # (Why did Joost set this value to 13?)
+        # Initializing kernels centroid embedding
+        self.kernels = nn.Parameter(torch.Tensor(in_features, out_features,
+                                                 in_features))
+        self.N = (torch.ones(out_features)).to(device)
         self.m = torch.zeros(in_features, out_features).to(device)
-        self.m *= self.N
 
         nn.init.normal_(self.m, 0.05, 1)
         nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
+        self.m *= self.N
 
 
     def forward(self, x):
@@ -51,7 +84,7 @@ class RBF_model(nn.Module):
         z = self.fe(x)
         z = torch.einsum("ij, mnj->imn", z, self.kernels)
 
-        # Getting embedded centres
+        # Getting embedded centroids
         c = (self.m / self.N.unsqueeze(0)).unsqueeze(0).to(self.device)
 
         # Getting distances to each centroid
@@ -62,13 +95,14 @@ class RBF_model(nn.Module):
         return distances
 
 
-    def update_centres(self, inputs, labels):
+    def update_centroids(self, inputs, labels):
         # Defining update function
         update_f = lambda x, y: self.gamma * x + (1 - self.gamma) * y
 
         # Summing labels for updating N
         unique, counts = torch.unique(labels, return_counts = True)
-        labels_sum = torch.zeros(self.out_features, dtype = torch.long).to(self.device)
+        labels_sum = torch.zeros(self.out_features,
+                                 dtype = torch.long).to(self.device)
         labels_sum[unique] = counts
  
         # Update N
@@ -81,48 +115,48 @@ class RBF_model(nn.Module):
         z = z.type(torch.LongTensor)
         centroid_sum = torch.einsum("ijk, il->jk", z, labels).to(self.device)
 
-        # Update m here
+        # Update m
         self.m = update_f(self.m, centroid_sum)
 
 
-def get_gradients(inputs, model_output):
-    """Function that calculates a gradients for model inputs,
-    given the predicted output.
+    def get_gradients(self, inputs, model_output):
+        """Function that calculates a gradients for model inputs,
+        given the predicted output.
 
-    Args:
-        inputs: Model inputs.
-        model_output: Predicted labels given input.
-    """
-    gradients = torch.autograd.grad(outputs = model_output, inputs = inputs,
-                                    grad_outputs = torch.ones_like(model_output),
-                                    create_graph = True)[0]
-    return gradients.flatten(start_dim = 1)
+        Args:
+            inputs: Model inputs.
+            model_output: Predicted labels given input.
+        """
+        gradients = torch.autograd.grad(outputs = model_output, inputs = inputs,
+                                        grad_outputs = torch.ones_like(model_output),
+                                        create_graph = True)[0]
+        return gradients.flatten(start_dim = 1)
 
 
-def get_grad_pen(inputs, model_output):
-    """Function that calculates the gradient penalty
-    based on the gradients of the inputs, its L2 norm,
-    applying the two sided penalty and the gradient
-    penalty constant. Taken from Joost van Amersfoort
-    paper on DUQ (2020).
+    def get_grad_pen(self, inputs, model_output):
+        """Function that calculates the gradient penalty
+        based on the gradients of the inputs, its L2 norm,
+        applying the two sided penalty and the gradient
+        penalty constant. Taken from Joost van Amersfoort
+        paper on DUQ (2020).
 
-    Args:
-        inputs: Model inputs.
-        model_output: Predicted labels given input.
-    """
-    # Gradient penalty constant, taken from DUQ paper
-    gp_const = 0.5
+        Args:
+            inputs: Model inputs.
+            model_output: Predicted labels given input.
+        """
+        # Gradient penalty constant, taken from DUQ paper
+        gp_const = 0.5
 
-    # First getting gradients
-    gradients = get_gradients(inputs, model_output)
+        # First getting gradients
+        gradients = self.get_gradients(inputs, model_output)
 
-    # Then computing L2 norm (2 sided)
-    L2_norm = gradients.norm(2, dim = 1)
+        # Then computing L2 norm (2 sided)
+        L2_norm = gradients.norm(2, dim = 1)
 
-    # Applying the 2 sided penalty
-    grad_pen = ((L2_norm - 1) ** 2).mean()
+        # Applying the 2 sided penalty
+        grad_pen = ((L2_norm - 1) ** 2).mean()
 
-    return grad_pen * gp_const
+        return grad_pen * gp_const
 
 
 def cutoff_date(folder_name: str):
@@ -180,9 +214,9 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
         plt.close()
 
 
-def explainability_setup(model: torchvision.models, img_paths: list, option: str,
-                         device: torch.device, input_concat: torch.Tensor,
-                         predicted_labels: list, experiment_folder: str):
+def captum_explainability(model: torchvision.models, img_paths: list, option: str,
+                          device: torch.device, input_concat: torch.Tensor,
+                          predicted_labels: list, experiment_folder: str):
     """Function that generates function arguments for explainability.
     Since Captum has a very similar way of running the explainability functions
     Doing it like this is a nice option.
@@ -252,7 +286,129 @@ def gen_model_explainability(explain_func, model: torchvision.models,
     visualize_explainability(explainability_attr, img_paths, img_desintation)
 
 
-def deep_ensemble_uncertainty():
-   # Hardest to implement? -> No clear library available
-   # Testing module, but can not import test_model due to circular imports
-    print("Not yet implemented")
+def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5):
+    # Getting device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device: " + str(device))
+
+    # Defining the train transforms
+    transform = get_transforms(args.dataset, args.augmentation)
+    # Retrieving data loaders
+    data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
+                                    transform, args.dataset)
+
+    # Setting up tensorboard writers and writing hyperparameters
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
+    setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
+
+    print("Starting training phase")
+    for n in range(ensemble_n):
+        print("On ensemble run " + str(n))
+        # Retrieving hyperparameter dictionary
+        hyp_dict = setup_hyp_dict(experiment_name)
+        args = SimpleNamespace(**hyp_dict)
+
+        # Replacing the output classification layer with a N class version
+        # And transferring model to device
+        model = args.model
+        classes = data_loaders["train"].dataset.n_classes
+        model = set_classification_layer(model, classes, args.RBF_flag, device)
+        model.to(device)
+
+        model, c_labels, c_labels_pred = train_model(model, device, 
+                                                     args.criterion, 
+                                                     args.optimizer, 
+                                                     args.scheduler,
+                                                     data_loaders, 
+                                                     tensorboard_writers,
+                                                     args.epochs, 
+                                                     args.PFM_flag,
+                                                     args.RBF_flag, 
+                                                     args.early_limit,
+                                                     args.replacement_limit,
+                                                     experiment_path,
+                                                     classes)
+        torch.save(model, os.path.join(experiment_path, "model.pth"))
+
+        # Adding the confusion matrix of the last epoch to the tensorboard
+        add_confusion_matrix(c_labels, c_labels_pred, 
+                             tensorboard_writers["hyp"],
+                             data_loaders["train"].dataset.label_map)
+
+        # Closing tensorboard writers
+        for _, writer in tensorboard_writers.items():
+            writer.close()
+
+    merge_experiments([sys.argv[1]], results_path)
+    experiment_folders = os.listdir(os.path.join(results_path, experiment_name))
+    test_loader = data_loaders["test"]
+    predictions_per_model = []
+
+    print("Starting testing phase")
+    for experiment_folder in experiment_folders:
+        print("On ensemble run " + str(n))
+
+        # Loading the model from an experiment directory
+        model = torch.load(os.path.join("Results", "Experiment-Results", 
+                                        experiment_folder, "model.pth"), 
+                           map_location = torch.device(device))
+        img_destination = os.path.join("Results", "Test-Predictions", experiment_folder)
+
+        # Getting test predictions
+        prediction_list, _, _ = test_model(model, 
+                                           device,
+                                           test_loader,
+                                           img_destination,
+                                           args.rbf_flag)
+        predictions_per_model.append(prediction_list)
+    
+    # TODO: predicted_labels needs to be combined into one list,
+    #       with most frequent values being the final prediction.
+
+    # TODO: predicted_uncertaitny needs to be the proportion of
+    #       models that predict the final label for a datapoint.
+
+    # After ensemble training and testing, save the test predictions
+    # The labels are a combination of predicted labels by each model
+    # The uncertainty is a measure of the agreement that exists
+    # on the predicted label between the models
+    img_destination = os.path.join("Results", "Explainability-Results",
+                                   "ENS" + str(ensemble_n) + experiment_name)
+    save_test_predicts(predicted_labels, img_paths, img_destination,
+                       data_loaders["train"].dataset, predicted_uncertainty)
+
+
+if __name__ == '__main__':
+    # Explainability.py is runnable for either Captum explainability or
+    # Deep Ensemble Uncertainty. The experiment argument takes both
+    # the experiment folder if using Captum, or the experiment itself
+    # if using DEU.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("experiment", type = str)
+    parser.add_argument("explainability_method", choices = ["Captum", "DEU"], type = str)
+    parser.add_argument("--n_ensembles", type = int, default = 5)
+    parser.add_argument("--explainability_variant", type = str, default = "integrated_gradients",
+                         choices = ["integrated_gradients", "saliency_map", "deeplift",
+                                    "guided_backpropagation"])
+    args = parser.parse_args() 
+    
+    if args.experiment == "Captum":
+        if os.path.exists(os.path.join("Results", "Experiment-Results", args.experiment)):
+            model, predicted_labels, img_paths, input_concat = setup_testing(args.experiment)
+            # Cutting off part of the data, since too much causes CUDA memory issues
+            if len(img_paths) > 100:
+                img_paths = img_paths[:100]
+                input_concat = input_concat[:100]
+                predicted_labels = predicted_labels[:100]
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            # Getting explainability results
+            captum_explainability(model, img_paths, args.explainability_variant,
+                                  device, input_concat, predicted_labels, 
+                                  args.experiment)
+    elif args.experiment == "DEU":
+        if os.path.exists(os.path.join("Experiments", args.experiment)):
+            results_path = os.path.join("Results", "Experiment-Results")
+            deep_ensemble_uncertainty(args.experiment, results_path, args.n_ensembles) 
+        else:
+            print("Experiment not found, exiting ...")

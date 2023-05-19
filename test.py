@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import sys
 import tensorrt as trt
 import time
 import torch
@@ -109,8 +108,8 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     return prediction_list, img_paths_list, input_concat
 
 
-def setup_testing(experiment_folder: str, convert_trt: bool = False, 
-                  explain_model: str = None):
+def setup_testing(model: torchvision.models, experiment_folder: str,
+                  convert_trt: bool = False):
     """Function that sets up dataloader, transforms and loads in the model
     for testing. 
 
@@ -130,7 +129,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Loading the model form a experiment directory
+    # Loading the model from an experiment directory
     # Map location because if CPU, it otherwise causes issues
     model = torch.load(os.path.join("Results", "Experiment-Results", 
                                      experiment_folder, "model.pth"), 
@@ -182,32 +181,17 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False,
     # Testing the model on testing data
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
                                                            img_destination, rbf_flag)
+    return model, predicted_labels, img_paths, input_concat
 
-    # Optionally, explain the model using integrated gradients
-    # Reduce the amount of images to explain, since doing it with too many
-    # Causes CUDA out of memory errors
-    if explain_model != None:
-        if len(img_paths) > 100:
-            img_paths = img_paths[:100]
-            input_concat = input_concat[:100]
-            predicted_labels = predicted_labels[:100]
-        explainability_setup(model, img_paths, explain_model, device,
-                             input_concat, predicted_labels, experiment_folder)
 
 if __name__ == '__main__':
-    # Checking if required folder exists
-    if len(sys.argv) > 1:
-        if os.path.exists(os.path.join("Results", "Experiment-Results", sys.argv[1])):
-            print("Testing on model from experiment: " + sys.argv[1])
-        else:
-            print("Experiment not found, exiting ...")
-
-    # Forming argparser that takes input arguments, with optional
-    # booleans for convert_trt and explain_model
     parser = argparse.ArgumentParser()
-    parser.add_argument("--convert_trt", action = argparse.BooleanOptionalAction)
-    parser.add_argument("--explain_model", default = None, const = "integrated_gradients",
-                        nargs = "?", choices = ["integrated_gradients", "saliency_map",
-                                                "deeplift", "guided_backpropagation"])
-    args = parser.parse_args(sys.argv[2:])
-    setup_testing(sys.argv[1], args.convert_trt, args.explain_model)
+    parser.add_argument("experiment_folder", type = str)
+    parser.add_argument("--convert_trt", action = "store_true")
+    args = parser.parse_args()
+    if os.path.exists(os.path.join("Results", "Experiment-Results",
+                                    args.experiment_folder)):
+        print("Testing on model from experiment: " + args.experiment_folder)
+        setup_testing(args.experiment_folder, args.convert_trt)
+    else:
+        print("Experiment not found, exiting ...")

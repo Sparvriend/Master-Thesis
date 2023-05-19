@@ -10,7 +10,6 @@ import torchvision
 from tqdm import tqdm
 from types import SimpleNamespace
 
-from explainability import get_grad_pen
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
@@ -108,7 +107,7 @@ def train_model(model: torchvision.models, device: torch.device,
                     if phase == "train":
                         # Optionally, add L2 gradient penalty to RBF loss
                         if rbf_flag == True:
-                            grad_pen = get_grad_pen(inputs, model_output)
+                            grad_pen = model.get_grad_pen(inputs, model_output)
                             loss += grad_pen
 
                         loss.backward()
@@ -119,7 +118,7 @@ def train_model(model: torchvision.models, device: torch.device,
                         if rbf_flag == True:
                             with torch.no_grad():
                                 model.eval()
-                                model.update_centres(inputs, labels)
+                                model.update_centroids(inputs, labels)
 
                     # Adding the loss over the epoch and counting
                     # total images a prediction was made over
