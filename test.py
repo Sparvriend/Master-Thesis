@@ -8,15 +8,15 @@ from torch.utils.data import DataLoader
 import torchvision
 from tqdm import tqdm
 
-from utils import get_data_loaders, save_test_predicts, remove_predicts    
-from explainability import explainability_setup, cutoff_date
-
+from utils import get_data_loaders, save_test_predicts, remove_predicts, \
+                  cutoff_date    
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
+TRTFLAG = True
 try:
     from torch2trt import torch2trt
 except ModuleNotFoundError:
-    print("Could not import torch2trt, model conversion to trt will not work")
+    TRTFLAG = False
 
 
 def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
@@ -108,8 +108,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     return prediction_list, img_paths_list, input_concat
 
 
-def setup_testing(model: torchvision.models, experiment_folder: str,
-                  convert_trt: bool = False):
+def setup_testing(experiment_folder: str, convert_trt: bool = False):
     """Function that sets up dataloader, transforms and loads in the model
     for testing. 
 
@@ -176,7 +175,11 @@ def setup_testing(model: torchvision.models, experiment_folder: str,
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
     # Takes ~30 seconds for MobileNetV2 - ~5 mins for EfficientNetB1
     if convert_trt:
-        model = convert_to_trt(model, len(test_loader.dataset), batch_size)
+        if TRTFLAG == False:
+            print("torch2trt library not on device, skipping trt conversion")
+        else:
+            print("Converting model to trt model")
+            model = convert_to_trt(model, len(test_loader.dataset), batch_size)
 
     # Testing the model on testing data
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
@@ -185,6 +188,8 @@ def setup_testing(model: torchvision.models, experiment_folder: str,
 
 
 if __name__ == '__main__':
+    # Forming argparser with experiment folder and optional
+    # convert to trt flag
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment_folder", type = str)
     parser.add_argument("--convert_trt", action = "store_true")

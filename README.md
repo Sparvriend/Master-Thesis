@@ -14,13 +14,10 @@
       -> Check if RBF DUQ still works (removed + 13 and swapped self.m *= self.N location)  
       -> Check if vanishing gradients still occurs for RBF model without gradient penalty  
       -> Fix gradient penalty (loss does not decrease from epoch 0, stays 181.9 across model runs)  
-      -> Finish Deep Ensemble Uncertainty (combining results and calculating uncertainty)  
-      -> Test if everything is runnable/works in explainability.py    
+      -> Test if everything is runnable/works in explainability.py with argparser     
       -> Look into adding augmentation to uncertainty methods  
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability  
-* TODO: Convert all runnable files to using argparser  
-* TODO: Check if test.py still works as intended with changed argparser  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  

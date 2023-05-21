@@ -1,6 +1,6 @@
+import argparse
 import copy
 import os
-import sys
 import time
 import torch
 from torch import nn, optim
@@ -235,49 +235,32 @@ def run_experiment(experiment_name: str):
 
     # Closing tensorboard writers
     for _, writer in tensorboard_writers.items():
-        writer.close()
-
-
-def setup():
-    """This function sets up experimentation. There are three methods of
-    running the experiment, this function takes care of running with
-    whatever method is specified by the input.
-    """
-    experiment_path = "Experiments"
-    results_path = os.path.join("Results", "Experiment-Results")
-    if len(sys.argv) > 1:
-        if os.path.exists(os.path.join(experiment_path, sys.argv[1] + ".json")):
-            if len(sys.argv) == 2:
-                print("Running experiment: " + sys.argv[1])
-                run_experiment(sys.argv[1])
-            else:
-                for _ in range(int(sys.argv[2])):
-                    print("Running experiment: " + sys.argv[1])
-                    run_experiment(sys.argv[1])
-                merge_experiments([sys.argv[1]], results_path)
-                calculate_acc_std([sys.argv[1]], results_path)
-        else:
-            print("Experiment not found, exiting ...")
-    else:
-        # Listing the experiments, which are the JSON files
-        # Without the testaugments file, since that is only meant
-        # to be ran by test_augmentations.py
-        experiment_list = []
-        files = os.listdir(experiment_path)
-        for file in files:
-            if file.endswith(".json"):
-                experiment_list.append(file[:-5])
-        experiment_list.remove("TestAugments")
-        experiment_list.remove("DEFAULT")
-
-        print("No experiment name given, running all experiments 5 times")
-        for _ in range(5):
-            for file in experiment_list:
-                print("Running experiment: " + file)
-                run_experiment(file)
-        merge_experiments(experiment_list, results_path)
-        calculate_acc_std(experiment_list, results_path)            
+        writer.close()          
 
 
 if __name__ == '__main__':
-    setup()
+    # Forming argparser with optional arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type = str)
+    parser.add_argument("--n_runs", type = int, default = 1)
+    args = parser.parse_args()
+    experiment_path = "Experiments"
+    results_path = os.path.join("Results", "Experiment-Results")
+    experiment_name = args.experiment_name
+    n_runs = args.n_runs
+
+    # Running all experiments at once is removed, older commits
+    # do still contain the code for it
+    
+    if experiment_name != None:
+        # An experiment was given, check if it exists
+        if os.path.exists(os.path.join(experiment_path, experiment_name + ".json")):
+            # Then run the experiment n_runs times
+            print("Running experiment: " + experiment_name)
+            for _ in range(n_runs):
+                    run_experiment(experiment_name)
+            if n_runs != 1:
+                merge_experiments([experiment_name], results_path)
+                calculate_acc_std([experiment_name], results_path) 
+        else:
+            print("Experiment not found, exiting ...")

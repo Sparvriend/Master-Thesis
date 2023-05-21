@@ -30,7 +30,7 @@ from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
 
-from explainability import RBF_model
+from rbf_model import RBF_model
 
 class CustomCorruption:
     """This is a class that allows for the corrupt function to be joined in a
@@ -76,6 +76,17 @@ def flatten_list(list: list) -> list:
         Flattened list.
     """
     return [item for sublist in list for item in sublist]
+
+
+def cutoff_date(folder_name: str):
+    """This function takes a folder in the form of a string.
+    It cuts off the date and time from the end of the string.
+    This function expects the folder name to not be in a folder.
+
+    Args:
+        folder_name: Name of the folder.
+    """
+    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-17]
 
 
 def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
