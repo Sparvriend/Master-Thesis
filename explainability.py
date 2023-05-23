@@ -5,7 +5,6 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import sys
 from PIL import Image
 import torch
 import torchvision.models
@@ -18,7 +17,7 @@ from test import setup_testing, test_model
 from utils import get_transforms, get_data_loaders, setup_tensorboard, \
                   setup_hyp_file, set_classification_layer, \
                   add_confusion_matrix, setup_hyp_dict, merge_experiments, \
-                  save_test_predicts, cutoff_date
+                  save_test_predicts, cutoff_date, remove_predicts
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
@@ -142,22 +141,30 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
+    # Retrieving hyperparameter dictionary
+    hyp_dict = setup_hyp_dict(experiment_name)
+    args = SimpleNamespace(**hyp_dict)
+
     # Defining the train transforms
     transform = get_transforms(args.dataset, args.augmentation)
     # Retrieving data loaders
     data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
                                     transform, args.dataset)
 
-    # Setting up tensorboard writers and writing hyperparameters
-    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
-    setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
-
     print("Starting training phase")
     for n in range(ensemble_n):
         print("On ensemble run " + str(n))
-        # Retrieving hyperparameter dictionary
+        # Resetting hyperparameter directory,
+        # since the models have to be reloaded each time
         hyp_dict = setup_hyp_dict(experiment_name)
         args = SimpleNamespace(**hyp_dict)
+
+        # Setting up tensorboard writers and writing hyperparameters
+        tensorboard_writers, experiment_path = setup_tensorboard(experiment_name
+                                                                 + "-n_run"
+                                                                 + str(n),
+                                                                 "Experiment-Results")
+        setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
         # Replacing the output classification layer with a N class version
         # And transferring model to device
@@ -190,27 +197,27 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
         for _, writer in tensorboard_writers.items():
             writer.close()
 
-    merge_experiments([sys.argv[1]], results_path)
+    merge_experiments([experiment_name], results_path)
     experiment_folders = os.listdir(os.path.join(results_path, experiment_name))
     test_loader = data_loaders["test"]
     predictions_per_model = []
 
     print("Starting testing phase")
     for experiment_folder in experiment_folders:
-        print("On ensemble run " + str(n))
-
         # Loading the model from an experiment directory
         model = torch.load(os.path.join("Results", "Experiment-Results", 
-                                        experiment_folder, "model.pth"), 
-                           map_location = torch.device(device))
+                           experiment_name, experiment_folder,
+                           "model.pth"), map_location = torch.device(device))
         img_destination = os.path.join("Results", "Test-Predictions", experiment_folder)
+        # Remove predicts function also creates the directory for the images
+        remove_predicts(img_destination)
 
         # Getting test predictions
         prediction_list, _, _ = test_model(model, 
                                            device,
                                            test_loader,
                                            img_destination,
-                                           args.rbf_flag)
+                                           args.RBF_flag)
         predictions_per_model.append(prediction_list)
 
     # Doing some list comprehension magic to get the predicted labels
@@ -225,10 +232,16 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
     # The labels are a combination of predicted labels by each model
     # The uncertainty is a measure of the agreement that exists
     # on the predicted label between the models
+    paths_list = [paths for _, paths in test_loader]
     img_destination = os.path.join("Results", "Explainability-Results",
                                    "ENS" + str(ensemble_n) + experiment_name)
-    save_test_predicts(predicted_labels, img_paths, img_destination,
+    remove_predicts(img_destination)
+    save_test_predicts(predicted_labels, paths_list, img_destination,
                        data_loaders["train"].dataset, predicted_uncertainty)
+    
+    # TODO: Fix the predictions, the predictions for the models are correct
+    # but the uncertainty is not, are the paths retrieved in different orders
+    # when unpacking from data loader?
 
 
 if __name__ == '__main__':
@@ -245,7 +258,7 @@ if __name__ == '__main__':
                                     "guided_backpropagation"])
     args = parser.parse_args() 
     
-    if args.experiment == "Captum":
+    if args.explainability_method == "Captum":
         if os.path.exists(os.path.join("Results", "Experiment-Results", args.experiment)):
             model, predicted_labels, img_paths, input_concat = setup_testing(args.experiment)
             # Cutting off part of the data, since too much causes CUDA memory issues
@@ -259,8 +272,8 @@ if __name__ == '__main__':
             captum_explainability(model, img_paths, args.explainability_variant,
                                   device, input_concat, predicted_labels, 
                                   args.experiment)
-    elif args.experiment == "DEU":
-        if os.path.exists(os.path.join("Experiments", args.experiment)):
+    elif args.explainability_method == "DEU":
+        if os.path.exists(os.path.join("Experiments", args.experiment + ".json")):
             results_path = os.path.join("Results", "Experiment-Results")
             deep_ensemble_uncertainty(args.experiment, results_path, args.n_ensembles) 
         else:

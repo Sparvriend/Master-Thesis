@@ -11,7 +11,6 @@
       -> Possibility: Blender  
       -> Possibility: Diffusion models  -> Better than GANS (Matias)
 * TODO: Finish explainability of the model  
-      -> Check if RBF DUQ still works (removed + 13 and swapped self.m *= self.N location)  
       -> Check if vanishing gradients still occurs for RBF model without gradient penalty  
       -> Fix gradient penalty (loss does not decrease from epoch 0, stays 181.9 across model runs)  
       -> Test if everything is runnable/works in explainability.py with argparser     

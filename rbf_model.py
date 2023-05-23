@@ -50,14 +50,14 @@ class RBF_model(nn.Module):
         # Initializing kernels centroid embedding
         self.kernels = nn.Parameter(torch.Tensor(in_features, out_features,
                                                  in_features))
-        self.N = (torch.ones(out_features)).to(device)
+        self.N = (torch.zeros(out_features) + 13).to(device)
         self.m = torch.zeros(in_features, out_features).to(device)
-
+        self.m *= self.N
+        
         nn.init.normal_(self.m, 0.05, 1)
         nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
-        self.m *= self.N
-
-
+    
+    
     def forward(self, x):
         # Getting feature output from fe and then applying kernels
         z = self.fe(x)

@@ -311,7 +311,7 @@ def save_test_predicts(predicted_labels: list, paths: list,
                        predicted_uncertainty: list) -> tuple[list, list]:
     """Function that converts labels to a list and then saves paths and labels
     to appropriate prediction directories. The prediction directory in
-    img_destination, should already exist, when running remove_predicts
+    img_destination, should already exist, by running remove_predicts
     somewhere before it.
 
     Args:
@@ -342,9 +342,9 @@ def save_test_predicts(predicted_labels: list, paths: list,
         text_size = 6
 
     # Loading necessary information and then drawing on the label on each image.
-    for idx, path in enumerate(paths):
-        name = os.path.normpath(path).split(os.sep)[-1]
-        img = Image.open(path)
+    for idx, img_path in enumerate(paths):
+        name = os.path.normpath(img_path).split(os.sep)[-1]
+        img = Image.open(img_path)
         label_name = label_dict[predicted_labels[idx]]
 
         # Drawing the label and saving the image

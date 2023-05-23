@@ -143,9 +143,10 @@ def train_model(model: torchvision.models, device: torch.device,
                     if param.requires_grad:
                         print(name, param.data)
                 van_grad = True
-            old_loss = loss_over_epoch
             
             if phase == "val":
+                old_loss = loss_over_epoch
+
                 # Change best model to new model if validation loss is better
                 if best_loss > loss_over_epoch:
                     best_model = copy.deepcopy(model)
