@@ -170,7 +170,7 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
         # And transferring model to device
         model = args.model
         classes = data_loaders["train"].dataset.n_classes
-        model = set_classification_layer(model, classes, args.RBF_flag, device)
+        model = set_classification_layer(model, classes)
         model.to(device)
 
         model, c_labels, c_labels_pred = train_model(model, device, 
@@ -181,7 +181,6 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
                                                      tensorboard_writers,
                                                      args.epochs, 
                                                      args.PFM_flag,
-                                                     args.RBF_flag, 
                                                      args.early_limit,
                                                      args.replacement_limit,
                                                      experiment_path,
@@ -239,10 +238,6 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
     save_test_predicts(predicted_labels, paths_list, img_destination,
                        data_loaders["train"].dataset, predicted_uncertainty)
     
-    # TODO: Fix the predictions, the predictions for the models are correct
-    # but the uncertainty is not, are the paths retrieved in different orders
-    # when unpacking from data loader?
-
 
 if __name__ == '__main__':
     # Explainability.py is runnable for either Captum explainability or

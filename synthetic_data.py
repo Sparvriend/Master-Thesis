@@ -383,10 +383,6 @@ def setup_data_generation():
     # Applying inpainting around the rectangle that is pasted on the image
     # (Applied after each pasting step)
 
-    # OPTIONAL: Perform a dataset comparison study, is the model capable of recognizing if
-    # an image is synthetic or not?
-    # TODO: Different locations of missing label print for fail_label_not_fully_printed
-
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]

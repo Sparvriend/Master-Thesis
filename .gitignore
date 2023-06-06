@@ -16,3 +16,4 @@ Master-Thesis-Experiments/results.txt
 *.jpeg
 tiny-imagenet-200/*
 Results
+temp.py

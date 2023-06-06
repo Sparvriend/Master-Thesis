@@ -2,19 +2,13 @@
 
 ## TODO in order of priority
 * TODO: Create synthetic data  
-      -> Possibility: Procedural (in synthetic_data.py)  
-            -> TODO: Fix angled rectangle mapping  
-            -> Alternative: Use a model like MASK-RCNN to detect filter bounding boxes  
-      -> Possibility: GANs -> Combine with CIFAR100?  
+      -> Comparison study of GANS/Diffusion models vs. handcrafted synthetic data  
+            -> Implement synthetic data generation with GAN/Diffusion models  
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
-      -> Possibility: Blender  
-      -> Possibility: Diffusion models  -> Better than GANS (Matias)
+            -> Additional dataset: CIFAR100  
 * TODO: Finish explainability of the model  
-      -> Check if vanishing gradients still occurs for RBF model without gradient penalty  
-      -> Fix gradient penalty (loss does not decrease from epoch 0, stays 181.9 across model runs)  
-      -> Test if everything is runnable/works in explainability.py with argparser     
-      -> Look into adding augmentation to uncertainty methods  
+      -> Change function setup in train_rbf.py to accept experiments as inputs  
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
@@ -32,21 +26,16 @@
       -> East Detector  
       -> Do a short visibility study if it turns out to be too complicated  
 
-
 ## Optional TODOs
 * OPTIONAL: Do a rerun of PEP8 in all files  
 * OPTIONAL: Make a jupyter notebook implementation of some of the code, so that is can easily be shown off to others  
 * OPTIONAL: Use 3D plots with color to represent results     
 * OPTIONAL: Test all code with laptop to see if it works without CUDA  
+* OPTIONAL: Perform a dataset comparison study (Synthetic vs. non synthetic), is the model capable of recognizing if an image is synthetic or not?  
 
 ### Tensorboard tip
 
 To open tensorboard in browser, run the following command in a new terminal: tensorboard --logdir=Master-Thesis-Experiments
-
-### RBF model learning rates
-
-Due to the L2 two sided gradient penalty that is applied to RBF models, the vanishing gradient problem can occur, since the penalty can cause the gradients to be updated too aggresively. To mitigate this, the learning rate has to be set to a smaller value. For example the ResNet18 model, a learning rate of 0.01 is too high and causes vanishing gradients already after a few batches. The limit on which this tends to occur for ResNet18 is at a learning rate of 0.001. Another solution to this problem is to not use the pretrained weights for the models; these weights are too small and cause the vanishing gradients problem when updated aggresively. It should be noted that the vanishing gradients problem does not occur in Joost van Amersfoorts version of DUQ, even when using a high learning rate in combination with pretrained weights.
-
 
 ### Class definition for the NTZFilterDataset
 

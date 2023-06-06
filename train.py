@@ -20,9 +20,8 @@ def train_model(model: torchvision.models, device: torch.device,
                 criterion: nn.CrossEntropyLoss, optimizer: optim.SGD,
                 scheduler: lr_scheduler.MultiStepLR, data_loaders: dict,
                 tensorboard_writers: dict, epochs: int, pfm_flag: bool,
-                rbf_flag: bool, early_stop_limit: int,
-                model_replacement_limit: int, experiment_path: str,
-                classes: int) -> tuple[nn.Module, list, list]:
+                early_stop_limit: int, model_replacement_limit: int,
+                experiment_path: str, classes: int) -> tuple[nn.Module, list, list]:
     """Function that improves the model through training and validation.
     Includes early stopping, iteration model saving only on improvement,
     performance metrics saving and timing.
@@ -40,7 +39,6 @@ def train_model(model: torchvision.models, device: torch.device,
         epochs: Number of epochs to train the model for.
         pfm_flag: Boolean deciding on whether to print performance
                   metrics to terminal.
-        rbf_flag: Boolean indicating DUQ usage.
         early_stop_limit: Number of epochs to wait before early stopping.
         model_replacement_limit: Number of epochs to wait before
                                  replacing model.
@@ -56,15 +54,12 @@ def train_model(model: torchvision.models, device: torch.device,
     early_stop = 0
     model_replacement = 0
 
-    old_loss = 1000
-    van_grad = False
-
     # Setting up performance metrics
     acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
     f1_metric = F1Score(task = "multiclass", num_classes = classes).to(device)
 
     for i in range(epochs):
-        print("On epoch " + str(i))
+        print("Epoch " + str(i))
         for phase in ["train", "val"]:
             if phase == "train":
                 model.train()
@@ -92,12 +87,11 @@ def train_model(model: torchvision.models, device: torch.device,
 
                     # Removing gradients from previous batch
                     optimizer.zero_grad()
-                    inputs.requires_grad_(True) if rbf_flag else None
 
                     # Getting model output and labels
                     model_output = model(inputs)
-                    predicted_labels = model_output.argmax(dim=1)
-                    
+                    predicted_labels = model_output.argmax(dim = 1)
+
                     # Computing performance metrics
                     loss = criterion(model_output, labels)
                     acc += acc_metric(predicted_labels, labels).item()
@@ -105,20 +99,9 @@ def train_model(model: torchvision.models, device: torch.device,
                     
                     # Updating model weights if in training phase
                     if phase == "train":
-                        # Optionally, add L2 gradient penalty to RBF loss
-                        if rbf_flag == True:
-                            grad_pen = model.get_grad_pen(inputs, model_output)
-                            loss += grad_pen
-
+                        # Backwards pass and updating optimizer
                         loss.backward()
                         optimizer.step()
-
-                        inputs.requires_grad_(False) if rbf_flag else None
-                        # Optionally, update RBF centroids
-                        if rbf_flag == True:
-                            with torch.no_grad():
-                                model.eval()
-                                model.update_centroids(inputs, labels)
 
                     # Adding the loss over the epoch and counting
                     # total images a prediction was made over
@@ -133,20 +116,8 @@ def train_model(model: torchvision.models, device: torch.device,
             report_metrics(pfm_flag, start_time, len(data_loaders[phase]), acc,
                            f1_score, loss_over_epoch, total_imgs, writer, i,
                            experiment_path)
-            if phase == "val" and loss_over_epoch > old_loss + 10:
-                # If this happens, vanishing gradient problem likely occured
-                print("Phase = " + str(phase))
-                print("Old loss = " + str(old_loss))
-                print("New loss = " + str(loss))
-                print("Epoch = " + str(i))
-                for name, param in model.named_parameters():
-                    if param.requires_grad:
-                        print(name, param.data)
-                van_grad = True
             
             if phase == "val":
-                old_loss = loss_over_epoch
-
                 # Change best model to new model if validation loss is better
                 if best_loss > loss_over_epoch:
                     best_model = copy.deepcopy(model)
@@ -171,11 +142,6 @@ def train_model(model: torchvision.models, device: torch.device,
                         return model, combined_labels, combined_labels_pred
                 # Updating the learning rate if updating scheduler is used
                 scheduler.step()
-    
-    if van_grad == True:
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                print(name, param.data)
 
     return model, combined_labels, combined_labels_pred
 
@@ -209,7 +175,7 @@ def run_experiment(experiment_name: str):
     # And transferring model to device
     model = args.model
     classes = data_loaders["train"].dataset.n_classes
-    model = set_classification_layer(model, classes, args.RBF_flag, device)
+    model = set_classification_layer(model, classes)
     model.to(device)
     
     # Recording total training time
@@ -220,7 +186,7 @@ def run_experiment(experiment_name: str):
                                                  args.optimizer, args.scheduler,
                                                  data_loaders, tensorboard_writers,
                                                  args.epochs, args.PFM_flag,
-                                                 args.RBF_flag, args.early_limit,
+                                                 args.early_limit,
                                                  args.replacement_limit,
                                                  experiment_path,
                                                  classes)

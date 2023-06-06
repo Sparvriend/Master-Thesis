@@ -30,8 +30,6 @@ from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
 
-from rbf_model import RBF_model
-
 class CustomCorruption:
     """This is a class that allows for the corrupt function to be joined in a
     list format with the Pytorch transforms.
@@ -166,9 +164,10 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     else:
         phase = "Validation "
 
-    # Calculating accuracy and score, since they are needed for writing.
+    # Calculating accuracy, loss and score, since they are needed for writing.
     mean_accuracy = (acc / epoch_length)
     mean_f1_score = (f1_score / epoch_length)
+    loss_over_epoch = (loss_over_epoch / epoch_length)
 
     if flag["Terminal"] == True:
         print("Loss = " + str(round(loss_over_epoch, 2)))
@@ -222,8 +221,7 @@ def find_classification_module(model: torchvision.models):
     raise ValueError("No linear layer module found in model.")
 
 
-def set_classification_layer(model: torchvision.models, classes: int,
-                             rbf_flag: bool, device: torch.device):
+def set_classification_layer(model: torchvision.models, classes: int):
     """This function changes the final classification layer
     from a PyTorch deep learning model to a X output classes version,
     depending on the dataset. It also converts to DUQ if rbf_flag is True.
@@ -237,16 +235,9 @@ def set_classification_layer(model: torchvision.models, classes: int,
     Returns:
         The model with the new classification layer.
     """
-    name, module, idx = find_classification_module(model)
+    name, module, _ = find_classification_module(model)
     in_features = module.in_features
-    if rbf_flag == True:
-        if idx != None:
-            model._modules[name][idx] = torch.nn.Identity()
-        else:
-            model._modules[name] = torch.nn.Identity()
-        model = RBF_model(model, in_features, classes, device)
-    else:
-        model._modules[name] = nn.Linear(in_features = in_features, out_features = classes)
+    model._modules[name] = nn.Linear(in_features = in_features, out_features = classes)
     return model
 
 
@@ -356,14 +347,14 @@ def save_test_predicts(predicted_labels: list, paths: list,
         if len(predicted_uncertainty) != 0:
             if type(predicted_uncertainty[0]) == torch.Tensor:
                 predicted_uncertainty = convert_to_list(predicted_uncertainty)
-            uncertainty = round(predicted_uncertainty[idx], 2)
+            uncertainty = round(predicted_uncertainty[idx], 2) 
 
             width, height = img.size
             bar_height = text_size
             bar_img = Image.new("RGB", (width, height + bar_height), color = "white")
             bar_img.paste(img, (0, 0))
             draw = ImageDraw.Draw(bar_img)
-            draw.text((0, height), "Uncertainty = " + str(uncertainty), font = font, fill = 255)
+            draw.text((0, height), "Certainty = " + str(uncertainty), font = font, fill = 255)
             img = bar_img
 
         img.save(os.path.join(img_destination, name))
@@ -567,17 +558,17 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
             T.Resize(256),
             T.CenterCrop(224),
             T.ToTensor(),
-            T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]),
+            T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
         ])
     elif dataset.__name__ == "CIFAR10Dataset":
         transform = T.Compose([
             T.ToTensor(),
-            T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010]),
+            T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010])
         ])
     elif dataset.__name__ == "TinyImageNet200Dataset":
         transform = T.Compose([
             T.ToTensor(),
-            T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262]),
+            T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262])
         ])
     return transform
 
@@ -665,7 +656,9 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
                          "random_choice": T.RandomChoice(combined_transforms),
                          "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET),
                          "no_augment": T.Lambda(lambda x: x),
-                         "random_apply": T.RandomOrder(combined_transforms)}
+                         "random_apply": T.RandomOrder(combined_transforms),
+                         "simple": T.Compose([T.RandomCrop(32, padding=4),
+                                           T.RandomHorizontalFlip()])}
 
     # Getting default transform and inserting selected transform type
     transform = get_default_transform(dataset)
@@ -716,7 +709,7 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
                             num_workers = num_workers)
     test_loader = DataLoader(test_data, batch_size = batch_size,
                              collate_fn = sep_test_collate, 
-                             shuffle = shuffle, num_workers = num_workers)
+                             shuffle = False, num_workers = num_workers)
     
     data_loaders = {"train": train_loader, "val": val_loader, "test": test_loader}
     return data_loaders

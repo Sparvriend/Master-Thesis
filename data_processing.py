@@ -133,8 +133,7 @@ def create_dirs():
                 os.makedirs(path)
     
     # Creating all directories needed in Results/
-    dirs = ["Augmentaton-Testing", "Experiment-Results",
-            "Explainability-Results", "Test-Predictions"]
+    dirs = ["Experiment-Results", "Explainability-Results", "Test-Predictions"]
     for dir in dirs:
         path = os.path.join("Results", dir)
         if not os.path.exists(path):
