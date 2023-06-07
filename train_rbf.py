@@ -1,16 +1,16 @@
+import argparse
+import os
 import time
 import torch
-from torch import nn, optim
-from torch.optim import lr_scheduler
+from torch import nn
 from torchmetrics import Accuracy, F1Score
 import torchvision
 from tqdm import tqdm
+from types import SimpleNamespace
 
 from utils import get_transforms, setup_tensorboard, get_data_loaders, \
-                  report_metrics, find_classification_module
-
-from datasets import CIFAR10Dataset
-from torchvision.models import resnet18
+                  report_metrics, find_classification_module, setup_hyp_dict, \
+                  setup_hyp_file
 
 
 class RBF_model(nn.Module):
@@ -134,7 +134,7 @@ class RBF_model(nn.Module):
             model_output: Predicted labels given input.
         """
         # Gradient penalty constant, taken from DUQ paper
-        gp_const = 0.25
+        gp_const = 0.5
 
         # First getting gradients
         gradients = self.get_gradients(inputs, model_output)
@@ -151,6 +151,14 @@ class RBF_model(nn.Module):
 def set_rbf_model(model: torchvision.models, classes: int, device: torch.device):
     """This function takes a Pytorch deep Learning model, finds its
     classification layer and then converts that to an RBF layer.
+
+    Args:
+        model: Pytorch deep learning model.
+        classes: Amount of classes in the dataset.
+        device: Device to run the model on.
+
+    Returns:
+        Model adapted to an RBF version
     """
     name, module, idx = find_classification_module(model)
     in_features = module.in_features
@@ -162,44 +170,68 @@ def set_rbf_model(model: torchvision.models, classes: int, device: torch.device)
     return model
 
 
-if __name__ == '__main__':
-    """This is a temproary function that exists to showcase a 
-    working setup for a model with an RBF layer. It should be replaced
-    in the future with a version that is capable of accepting an
-    experiment file.
+def preprocess_model(model: torchvision.models):
+    """Function that takes care of converting convolutional
+    and maxpooling layers to appropriate versions for usage
+    in DUQ.
+    
+    Args:
+        model: Pytorch deep learning model.
+    
+    Returns:
+        Model adapted appropriate for DUQ.
     """
+    if model.__class__.__name__ == "ResNet":
+        model.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.maxpool = torch.nn.Identity()
+    # Other model types should later also be included here
+    return model
+
+def train_duq(experiment_name: str):
+    """Function used for training a model with DUQ.
+    The model is converted to a DUQ model and then trained
+    in a training/validation phase setup. All types of models
+    and datasets are possible to be used.
+
+    Args:
+        experiment_name: Name of the experiment to be used.
+    """
+    # Setting device to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: " + str(device))
 
-    # Getting transforms, dataloaders and the model
-    transform = get_transforms(CIFAR10Dataset, "simple")
-    data_loaders = get_data_loaders(128, True, 4, transform, CIFAR10Dataset)
-    model = resnet18()
+    # Retrieving hyperparameter dictionary
+    hyp_dict = setup_hyp_dict(experiment_name)
+    args = SimpleNamespace(**hyp_dict)
 
-    # Setting optimizer and the loss to Binary Cross Entropy (as used by Joost in DUQ setup)
-    optimizer = optim.SGD(model.parameters(), lr = 0.05, momentum = 0.9, weight_decay = 0.0005)
-    criterion = nn.BCELoss()
+    # Checking if the experiment is set to be RBF
+    if args.RBF_flag == False:
+        print("Not an RBF experiment, exiting ...")
+        return
 
-    # Adapting model calls
+    # Defining the train transforms
+    transform = get_transforms(args.dataset, args.augmentation)
+    # Retrieving data loaders
+    data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
+                                    transform, args.dataset)
+
+    # Setting up tensorboard writers and writing hyperparameters
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
+    setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
+
+    # Getting the model and converting to RBF
+    model = args.model
     classes = data_loaders["train"].dataset.n_classes
-    model.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-    model.maxpool = torch.nn.Identity()
+    model = preprocess_model(model)
     model = set_rbf_model(model, classes, device)
     model.to(device)
-
-    # Additional function arguments, that are normally taken from an experiment file
-    epochs = 100
-    pfm_flag = {"Terminal": False, "Tensorboard": True}
-    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones = [25, 50, 75], gamma = 0.2)
-    early_stop_limit = 0
-    tensorboard_writers, experiment_path = setup_tensorboard("RBFMANUAL", "Experiment-Results")
     
     # Setting up metrics
     best_loss = 1000
     acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
     f1_metric = F1Score(task = "multiclass", num_classes = classes).to(device)
 
-    for i in range(epochs):
+    for i in range(args.epochs):
         print("Epoch " + str(i))
         for phase in ["train", "val"]:
             if phase == "train":
@@ -222,18 +254,20 @@ if __name__ == '__main__':
 
             for inputs, labels in tqdm(data_loaders[phase]):
                 model.train()
-                optimizer.zero_grad()
+                args.optimizer.zero_grad()
 
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
                 inputs.requires_grad_(True)
 
+                # Get model outputs, convert labels to one hot for
+                # calculating BCE loss and updating centroids
                 model_output = model(inputs)
                 predicted_labels = model_output.argmax(dim = 1)
                 labels_l = nn.functional.one_hot(labels, classes).float()
 
-                loss = criterion(model_output, labels_l)
+                loss = args.criterion(model_output, labels_l)
                 acc += acc_metric(predicted_labels, labels).item()
                 f1_score += f1_metric(predicted_labels, labels).item()
 
@@ -243,7 +277,7 @@ if __name__ == '__main__':
                     loss += grad_pen
                     # Backwards pass and updating optimizer
                     loss.backward()
-                    optimizer.step()
+                    args.optimizer.step()
 
                     inputs.requires_grad_(False)
 
@@ -261,7 +295,7 @@ if __name__ == '__main__':
                 combined_labels_pred.append(predicted_labels)
         
             writer = tensorboard_writers[phase]
-            report_metrics(pfm_flag, start_time, len(data_loaders[phase]), acc,
+            report_metrics(args.PFM_flag, start_time, len(data_loaders[phase]), acc,
                        f1_score, loss_over_epoch, total_imgs, writer, i,
                        experiment_path)
 
@@ -273,7 +307,20 @@ if __name__ == '__main__':
             # Early stopping if necessary
             else:
                 early_stop += 1
-                if early_stop > early_stop_limit and early_stop_limit != 0:
+                if early_stop > args.early_limit and args.early_limit != 0:
                     print("Early stopping ")
+                    return
             # Updating the learning rate if updating scheduler is used
-            scheduler.step()
+            args.scheduler.step()
+            
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type = str)
+    args = parser.parse_args()
+    experiment_name = args.experiment_name
+
+    if experiment_name != None:
+        # An experiment was given, check if it exists
+        if os.path.exists(os.path.join("Experiments", experiment_name + ".json")):
+            train_duq(experiment_name)

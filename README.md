@@ -7,8 +7,8 @@
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
             -> Additional dataset: CIFAR100  
+* TODO: Combine DUQ model with explainability methods  
 * TODO: Finish explainability of the model  
-      -> Change function setup in train_rbf.py to accept experiments as inputs  
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability  
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
