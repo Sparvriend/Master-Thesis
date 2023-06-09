@@ -49,6 +49,10 @@ class RBF_model(nn.Module):
     It is assumed that the labels used for updating the centroids are
     one-hot encoded, for usage in BCE loss.
 
+    Relevant variables for a forwards pass (N/m) and the kernels
+    are saved as part of the model by doing torch.save and later loading
+    with torch.load.
+
     The essence of DUQ is that it learns a set of centroids for each class,
     which it can then compare to new inputs during inference time. The
     distance to the closest centroid is the uncertainty metric.
@@ -230,6 +234,7 @@ def train_duq(experiment_name: str):
     best_loss = 1000
     acc_metric = Accuracy(task = "multiclass", num_classes = classes).to(device)
     f1_metric = F1Score(task = "multiclass", num_classes = classes).to(device)
+    training_start = time.time()
 
     for i in range(args.epochs):
         print("Epoch " + str(i))
@@ -312,11 +317,20 @@ def train_duq(experiment_name: str):
                     return
             # Updating the learning rate if updating scheduler is used
             args.scheduler.step()
-            
+
+    elapsed_time = time.time() - training_start
+    print("Total training time (H/M/S) = ", 
+          time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
+    torch.save(model, os.path.join(experiment_path, "model.pth"))
+
+    # Closing tensorboard writers
+    for _, writer in tensorboard_writers.items():
+        writer.close() 
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--experiment_name", type = str)
+    parser.add_argument("experiment_name", type = str)
     args = parser.parse_args()
     experiment_name = args.experiment_name
 

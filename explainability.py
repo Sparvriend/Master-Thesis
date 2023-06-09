@@ -17,7 +17,8 @@ from test import setup_testing, test_model
 from utils import get_transforms, get_data_loaders, setup_tensorboard, \
                   setup_hyp_file, set_classification_layer, \
                   add_confusion_matrix, setup_hyp_dict, merge_experiments, \
-                  save_test_predicts, cutoff_date, remove_predicts
+                  save_test_predicts, remove_predicts
+from train_rbf import RBF_model
 
 
 def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
@@ -81,8 +82,7 @@ def captum_explainability(model: torchvision.models, img_paths: list, option: st
         experiment_folder: path to the experiment folder that was tested on.
     """
     # Getting experiment_name and creating the folder to paste the images in
-    experiment_name = cutoff_date(experiment_folder)
-    img_desintation = os.path.join("Results", "Explainability-Results", experiment_name)
+    img_desintation = os.path.join("Results", "Explainability-Results", experiment_folder)
     if not os.path.exists(img_desintation):
         os.mkdir(img_desintation)
 
@@ -112,8 +112,6 @@ def captum_explainability(model: torchvision.models, img_paths: list, option: st
             print("Running guided backpropagation for model explanation")
             gen_model_explainability(captum.attr.GuidedBackprop, model,
                                      img_paths, args, img_desintation)
-        else:
-            print("Explainability option not valid")
 
 
 def gen_model_explainability(explain_func, model: torchvision.models,
@@ -242,8 +240,8 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
 if __name__ == '__main__':
     # Explainability.py is runnable for either Captum explainability or
     # Deep Ensemble Uncertainty. The experiment argument takes both
-    # the experiment folder if using Captum, or the experiment itself
-    # if using DEU.
+    # the experiment results folder if using Captum, or the experiment itself
+    # if using DEU (.json file).
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment", type = str)
     parser.add_argument("explainability_method", choices = ["Captum", "DEU"], type = str)
@@ -257,10 +255,11 @@ if __name__ == '__main__':
         if os.path.exists(os.path.join("Results", "Experiment-Results", args.experiment)):
             model, predicted_labels, img_paths, input_concat = setup_testing(args.experiment)
             # Cutting off part of the data, since too much causes CUDA memory issues
-            if len(img_paths) > 100:
-                img_paths = img_paths[:100]
-                input_concat = input_concat[:100]
-                predicted_labels = predicted_labels[:100]
+            max_imgs = 100
+            if len(img_paths) > max_imgs:
+                img_paths = img_paths[:max_imgs]
+                input_concat = input_concat[:max_imgs]
+                predicted_labels = predicted_labels[:max_imgs]
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
             # Getting explainability results

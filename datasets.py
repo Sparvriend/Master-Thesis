@@ -77,7 +77,7 @@ class CIFAR10Dataset(ProjDataset):
         if self.data_type == "train" or self.data_type == "val":
             self.prop = 1
         elif self.data_type == "test":
-            self.prop = 0.0003
+            self.prop = 0.01
 
         # Reading training labels and encoding to integers
         label_df = pd.read_csv(os.path.join("data", "CIFAR10", "trainLabels.csv"))
@@ -105,14 +105,14 @@ class CIFAR10Dataset(ProjDataset):
 
 class TinyImageNet200Dataset(ProjDataset):
     """TinyImageNetDataset class, to use for any dataset formed
-    out of TinyImageNet images. Dataset taken from 
+    out of TinyImageNet images (64x64). Dataset taken from 
     https://www.kaggle.com/datasets/akash2sharma/tiny-imagenet
     The name has been adapted to TinyImageNet200"""
     def __init__(self, data_path: str, transform: T.Compose):
         super().__init__(data_path, transform)
 
         # Setting proportion of images to use from entire dataset
-        self.prop = 0.04
+        self.prop = 1
 
         # Reading labels if training or validation data
         classes = os.listdir(os.path.join("data", "TinyImageNet200", "train"))

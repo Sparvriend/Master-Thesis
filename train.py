@@ -208,7 +208,7 @@ def run_experiment(experiment_name: str):
 if __name__ == '__main__':
     # Forming argparser with optional arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--experiment_name", type = str)
+    parser.add_argument("experiment_name", type = str)
     parser.add_argument("--n_runs", type = int, default = 1)
     args = parser.parse_args()
     experiment_path = "Experiments"

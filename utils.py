@@ -325,12 +325,14 @@ def save_test_predicts(predicted_labels: list, paths: list,
     # Getting the dataset label map
     label_dict = dataset.label_map
 
+    # Set the text size, based on the average of width/height of the images
+    ex_width, ex_height = Image.open(paths[0]).size
+    text_size = int(((ex_height + ex_width) / 2)  / 16)
+
     if isinstance(dataset, NTZFilterDataset):
         text_loc = (50, 10)
-        text_size = 18
     else:
         text_loc = (0, 0)
-        text_size = 6
 
     # Loading necessary information and then drawing on the label on each image.
     for idx, img_path in enumerate(paths):
