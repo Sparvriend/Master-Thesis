@@ -17,7 +17,7 @@ from test import setup_testing, test_model
 from utils import get_transforms, get_data_loaders, setup_tensorboard, \
                   setup_hyp_file, set_classification_layer, \
                   add_confusion_matrix, setup_hyp_dict, merge_experiments, \
-                  save_test_predicts, remove_predicts
+                  save_test_predicts, remove_predicts, get_device
 from train_rbf import RBF_model
 
 
@@ -136,8 +136,7 @@ def gen_model_explainability(explain_func, model: torchvision.models,
 
 def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5):
     # Getting device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
+    device = get_device()
 
     # Retrieving hyperparameter dictionary
     hyp_dict = setup_hyp_dict(experiment_name)
@@ -260,7 +259,7 @@ if __name__ == '__main__':
                 img_paths = img_paths[:max_imgs]
                 input_concat = input_concat[:max_imgs]
                 predicted_labels = predicted_labels[:max_imgs]
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = get_device()
 
             # Getting explainability results
             captum_explainability(model, img_paths, args.explainability_variant,

@@ -50,6 +50,17 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
+def get_device():
+    """Function that returns the device, either cuda if gpu is availble or cpu.
+    
+    Returns:
+        Device on which the model is ran.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device: " + str(device))
+    return device
+
+
 def convert_to_list(labels: list) -> list:
     """Function that converts a list of tensors to a list of lists.
 

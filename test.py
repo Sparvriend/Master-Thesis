@@ -9,7 +9,7 @@ import torchvision
 from tqdm import tqdm
 
 from utils import get_data_loaders, save_test_predicts, remove_predicts, \
-                  cutoff_date    
+                  cutoff_date, get_device    
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
 
 TRTFLAG = True
@@ -125,8 +125,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False):
         torch.cuda._lazy_init()
     except RuntimeError:
         pass
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
+    device = get_device()
 
     # Loading the model from an experiment directory
     # Map location because if CPU, it otherwise causes issues

@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from utils import get_transforms, setup_tensorboard, setup_hyp_file, \
                   setup_hyp_dict, add_confusion_matrix, get_data_loaders, \
                   report_metrics, set_classification_layer, merge_experiments, \
-                  calculate_acc_std
+                  calculate_acc_std, get_device
 
 
 def train_model(model: torchvision.models, device: torch.device,
@@ -154,8 +154,7 @@ def run_experiment(experiment_name: str):
         experiment_name: Name of the experiment to run.
     """
     # Setting the device to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
+    device = get_device()
 
     # Retrieving hyperparameter dictionary
     hyp_dict = setup_hyp_dict(experiment_name)

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from utils import get_transforms, setup_tensorboard, get_data_loaders, \
                   report_metrics, find_classification_module, setup_hyp_dict, \
-                  setup_hyp_file
+                  setup_hyp_file, get_device
 
 
 class RBF_model(nn.Module):
@@ -201,8 +201,7 @@ def train_duq(experiment_name: str):
         experiment_name: Name of the experiment to be used.
     """
     # Setting device to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device: " + str(device))
+    device = get_device()
 
     # Retrieving hyperparameter dictionary
     hyp_dict = setup_hyp_dict(experiment_name)

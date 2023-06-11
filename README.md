@@ -6,7 +6,6 @@
             -> Implement synthetic data generation with GAN/Diffusion models  
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
-            -> Additional dataset: CIFAR100  
 * TODO: Finish explainability of the model  
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability  
