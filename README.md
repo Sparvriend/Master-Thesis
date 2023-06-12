@@ -7,9 +7,12 @@
             -> https://github.com/eriklindernoren/PyTorch-GAN  
             -> https://github.com/ajbrock/BigGAN-PyTorch  
 * TODO: Finish explainability of the model  
+      -> For DUQ + explainability, use tinyImageNet but with image sizes of 256x256, that way its much easier to show off the model explainability.  
+            -> Use the images from tinyImageNet to train on, but for showing a model prediction/uncertainty/explainability, look up  
+               the corresponding image in the ImageNet dataset and use that for prediction. Optionally, the ImageNet dataset can be  
+               reduced to only include the image from tinyImageNet.  
       -> Convert Saliency Map to RGB  
-      -> Look into using adverserial attacks for explainability  
-      -> For DUQ + explainability, use tinyImageNet but with image sizes of 256x256, that way its much easier to show off the model explainability.
+      -> Look into using adverserial attacks for explainability   
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  

@@ -21,8 +21,7 @@ from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
                                resnet18, ResNet18_Weights, \
                                efficientnet_b1, EfficientNet_B1_Weights
 import torchvision.transforms as T
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
