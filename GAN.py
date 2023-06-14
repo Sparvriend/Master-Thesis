@@ -74,6 +74,67 @@ class DCGAN_discriminator(nn.Module):
 
     def forward(self, input):
         return self.forward_call(input)
+    
+
+class LSGAN_generator(nn.Module):
+    def __init__(self):
+        super(LSGAN_generator, self).__init__()
+        self.img_size = 64
+        self.latent_dim = 100
+        self.channels = 3
+
+        self.init_size = self.img_size // 4
+        self.l1 = nn.Sequential(nn.Linear(self.latent_dim, 128 * self.init_size ** 2))
+
+        self.conv_blocks = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(128, 128, 3, stride=1, padding=1),
+            nn.BatchNorm2d(128, 0.8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(128, 64, 3, stride=1, padding=1),
+            nn.BatchNorm2d(64, 0.8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, self.channels, 3, stride=1, padding=1),
+            nn.Tanh(),
+        )
+
+    def forward(self, z):
+        out = self.l1(z)
+        out = out.view(out.shape[0], 128, self.init_size, self.init_size)
+        img = self.conv_blocks(out)
+        return img
+
+
+class LSGAN_discriminator(nn.Module):
+    def __init__(self):
+        super(LSGAN_discriminator, self).__init__()
+        self.channels = 3
+        self.img_size = 64
+
+        def discriminator_block(in_filters, out_filters, bn=True):
+            block = [nn.Conv2d(in_filters, out_filters, 3, 2, 1), nn.LeakyReLU(0.2, inplace=True), nn.Dropout2d(0.25)]
+            if bn:
+                block.append(nn.BatchNorm2d(out_filters, 0.8))
+            return block
+
+        self.model = nn.Sequential(
+            *discriminator_block(self.channels, 16, bn=False),
+            *discriminator_block(16, 32),
+            *discriminator_block(32, 64),
+            *discriminator_block(64, 128),
+        )
+
+        # The height and width of downsampled image
+        ds_size = self.img_size // 2 ** 4
+        self.adv_layer = nn.Linear(128 * ds_size ** 2, 1)
+
+    def forward(self, img):
+        out = self.model(img)
+        out = out.view(out.shape[0], -1)
+        validity = self.adv_layer(out)
+
+        return validity
 
 
 def split_loader(train_loader, standard_transform):
@@ -263,6 +324,9 @@ def setup_DCGAN(train_type: str, n_imgs: int, latent_vector_size: int):
     in utils.py, get_default_transforms function. Since DCGAN is not used
     further, this was not adapted.
 
+    LSGAN definitions taken from 
+    https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/lsgan/lsgan.py
+
     Args:
         train_type: Train GAN on class data combined or seperate.
         n_imgs: The amount of images to generate.
@@ -285,15 +349,18 @@ def setup_DCGAN(train_type: str, n_imgs: int, latent_vector_size: int):
 
     for idx, train_loader in enumerate(train_loaders):
         # Setup generator and discriminator
-        gen_model = DCGAN_generator()
-        disc_model = DCGAN_discriminator()
+        #gen_model = DCGAN_generator()
+        #disc_model = DCGAN_discriminator()
+        gen_model = LSGAN_generator()
+        disc_model = LSGAN_discriminator()
 
         # Setting their weights to mean 0 and std dev = 0.02
         gen_model.apply(weights_init)
         disc_model.apply(weights_init)
 
         # Setting criterion
-        criterion = nn.BCELoss()
+        #criterion = nn.BCELoss()
+        criterion = nn.MSELoss()
 
         # Setup Adam optimizers for both G and D
         optimizer_gen = optim.Adam(gen_model.parameters(), lr = 0.0002,
