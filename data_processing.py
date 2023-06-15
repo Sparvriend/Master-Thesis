@@ -189,13 +189,13 @@ def get_sample_data_ImageNet():
         os.mkdir(os.path.join(ImageNetSample_path, class_name))
         class_imgs_tinyImageNet = os.listdir(os.path.join(tinyImageNet_path, class_name))
         class_imgs_ImageNet = os.listdir(os.path.join(ImageNet_path, class_name))
-        subset_class_imgs = random.sample(class_imgs_ImageNet, n)
+        subset_class_imgs = random.sample(class_imgs_tinyImageNet, n)
 
         # Forming a loop in which the subset is checked for correspondence
         # Resample until all images are tinyImageNet images
-        flag = check_correspondence(subset_class_imgs, class_imgs_tinyImageNet, class_name)
+        flag = check_correspondence(subset_class_imgs, class_imgs_ImageNet, class_name)
         while flag == False:
-            flag = check_correspondence(subset_class_imgs, class_imgs_tinyImageNet, class_name)
+            flag = check_correspondence(subset_class_imgs, class_imgs_ImageNet, class_name)
 
         # Then copying all
         for img in subset_class_imgs:
