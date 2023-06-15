@@ -142,7 +142,26 @@ def create_dirs():
             os.mkdir(path)
 
 
-def extract_data_ImageNet():
+def check_correspondence(subset_class_imgs: list, class_imgs: list,
+                         class_name: str):
+    """Function that checks if all images in a subset are images
+    in a class.
+    
+    Args:
+        subset_class_imgs: List of images to check
+        class_imgs: List of images in the class
+        class_name: Name of the class
+    """
+    flag = True
+    for img in subset_class_imgs:
+        if img not in class_imgs:
+            print("Resampling for class " + str(class_name))
+            flag = False
+            break
+    return flag
+
+
+def get_sample_data_ImageNet():
     """Function that takes the ImageNet dataset, extracts training images
     from it corresponding to training images that exist in tinyImageNet:
     https://www.kaggle.com/datasets/akash2sharma/tiny-imagenet
@@ -154,46 +173,33 @@ def extract_data_ImageNet():
     correspond to those from ImageNet, so it is uncertain if the class
     from an image is one trained on in tinyImageNet.
     """
-    # Assume that data/ImageNet/train already exists
-    # Assume that data/ImageNet/test already exists
-    imageNet_zip_path = "data/ImageNet/imagenet-object-localization-challenge.zip" 
-    extract_path = "data/ImageNet/train"
+    # It is assumed that the ImageNet dataset is available in data/ImageNet
+    # It is also assumed that the tinyImageNet dataset is available in
+    # data/tinyImageNet200
     tinyImageNet_path = "data/TinyImageNet200/train"
+    ImageNet_path = "data/ImageNet/ILSVRC/Data/CLS-LOC/train/"
+    ImageNetSample_path = "data/ImageNetSamples"
     tinyImageNet_classes = os.listdir(tinyImageNet_path)
+    os.mkdir(ImageNetSample_path)
+    n = 10
 
-    # Open ImageNet zip file
-    with zipfile.ZipFile(imageNet_zip_path, 'r') as zip_file:
-        # Extract all files into file_info variable to iterate over
-        for file_info in tqdm(zip_file.infolist()):
-            # Get files within the class directories of the train set
-            if file_info.filename.startswith("ILSVRC/Data/CLS-LOC/train/"):
-                class_name = file_info.filename.split("/")[-2]
-                # If the directory is a class in tinyImageNet
-                if class_name in tinyImageNet_classes:
-                    # If the file is in the class folder
-                    class_files = os.listdir(os.path.join(tinyImageNet_path, class_name, "images"))
-                    if file_info.filename.split("/")[-1] in class_files:
-                        # Correct file, extract
-                        # Check if the class directory already exists
-                        if not os.path.exists(os.path.join(extract_path, class_name)):
-                            os.mkdir(os.path.join(extract_path, class_name))
-                            os.mkdir(os.path.join(extract_path, class_name, "images"))
-                        # Extract the image. zip_file.extract for some reason
-                        # adds the complete path to the file to the path it
-                        # saves to, which is why it has to be moved with 
-                        # shutil afterwards
-                        right_path = os.path.join(extract_path, class_name)
-                        wrong_path = os.path.join(extract_path, class_name, file_info.filename)
-                        zip_file.extract(file_info, right_path)
-                        shutil.move(wrong_path, os.path.join(right_path, "images"))
+    # For each class, randomly select n images
+    # and copy them to the ImageNetSamples directory
+    for class_name in tinyImageNet_classes:
+        os.mkdir(os.path.join(ImageNetSample_path, class_name))
+        class_imgs_tinyImageNet = os.listdir(os.path.join(tinyImageNet_path, class_name))
+        class_imgs_ImageNet = os.listdir(os.path.join(ImageNet_path, class_name))
+        subset_class_imgs = random.sample(class_imgs_ImageNet, n)
 
-    # Remove leftover directories under "ILSVRC" created by zip file extraction
-    for class_name in os.listdir(extract_path):
-        path = os.path.join(extract_path, class_name, "ILSVRC")
-        shutil.rmtree(path)
+        # Forming a loop in which the subset is checked for correspondence
+        # Resample until all images are tinyImageNet images
+        flag = check_correspondence(subset_class_imgs, class_imgs_tinyImageNet, class_name)
+        while flag == False:
+            flag = check_correspondence(subset_class_imgs, class_imgs_tinyImageNet, class_name)
 
-    # TODO: Rewrite the above code, such that it iterates over classes
-    # from tinyImageNet, and picks 10 random images from each class.
+        # Then copying all
+        for img in subset_class_imgs:
+            shutil.copy(os.path.join(ImageNet_path, class_name, img), os.path.join(ImageNetSample_path, class_name, img))
 
 
 if __name__ == '__main__':
@@ -201,4 +207,4 @@ if __name__ == '__main__':
     #create_dirs()
     #split_and_move_NTZ()
     #split_and_move_CIFAR()
-    extract_data_ImageNet()
+    get_sample_data_ImageNet()
