@@ -3,20 +3,16 @@
 ## TODO in order of priority
 * TODO: Create synthetic data  
       -> Comparison study of GANS/Diffusion models vs. handcrafted synthetic data  
-            -> Implement synthetic data generation with GAN/Diffusion models  
-            -> https://github.com/eriklindernoren/PyTorch-GAN  
-            -> https://github.com/ajbrock/BigGAN-PyTorch  
-      -> Implement LSGAN  
-      -> See if the DCGAN works on CIFAR10: Reduce the dataset size each time to see after how many images the DCGAN training becomes unstable.  
+      -> Can LSGAN training be improved such that it becomes stable?
+      -> See if the LSGAN works on CIFAR10: Reduce the dataset size each time to see after how many images the DCGAN training becomes unstable.  
 * TODO: Finish explainability of the model  
-      -> For DUQ + explainability, use tinyImageNet but with image sizes of 256x256, that way its much easier to show off the model explainability.  
-            -> Use the images from tinyImageNet to train on, but for showing a model prediction/uncertainty/explainability, look up  
-               the corresponding image in the ImageNet dataset and use that for prediction. Optionally, the ImageNet dataset can be  
-               reduced to only include the image from tinyImageNet.  
-      -> If needed, check if converting the other classifiers to DUQ is possible (maxpool/conv1 adaptation needed as well? See Joost email)  
+      -> For DUQ + explainability, use ImageNet10 for better visibility of explainability.
+      -> Look into converting MobileNetV2/EfficientNetB1/ShuffleNetV2 to DUQ version similar to how ResNet18 is converted
+            -> maxpool/conv1 adaptation. See Joost email
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability   
-* TODO: Add the same random seed to any file that uses a randomized function (including shuffle)  
+* TODO: Finish up synthetic_data.py (small improvements)
+* TODO: Add the same random seed to any file that uses a randomized function (including shuffle) -> For Pytorch, Random and Numpy. 
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  
@@ -31,6 +27,8 @@
       -> Manual labelling of each date on the filter  
       -> East Detector  
       -> Do a short visibility study if it turns out to be too complicated  
+* TODO: Update README  
+* TODO: Go through repository and cleanup (incl PEP8).
 
 ## Optional TODOs
 * OPTIONAL: Do a rerun of PEP8 in all files  

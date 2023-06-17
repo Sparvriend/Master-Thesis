@@ -383,6 +383,10 @@ def setup_data_generation():
     # Applying inpainting around the rectangle that is pasted on the image
     # (Applied after each pasting step)
 
+    # TODO: When pasting the class label onto the filter
+    # ensure that it is a certain pixel width from the edges
+    # (width and height) of the filter.
+
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]

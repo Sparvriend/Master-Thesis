@@ -154,3 +154,27 @@ class TinyImageNet200Dataset(ProjDataset):
 
         # Swapping the label map
         self.label_map = {v: k for k, v in self.label_map.items()}
+
+
+class ImageNet10(ProjDataset):
+    def __init__(self, data_path: str, transform: T.Compose):
+        super().__init__(data_path, transform)
+        classes = os.listdir(os.path.join("data", "ImageNet10", "train"))
+        self.label_map = {label: i for i, label in enumerate(classes)}
+        self.n_classes = len(self.label_map)
+
+        # For training images add both the label and the image
+        if self.data_type == "train" or self.data_type == "val":
+            for label, dir_name in enumerate(os.listdir(self.data_path)):
+                for file_name in os.listdir(os.path.join(self.data_path, dir_name)):
+                    self.img_paths.append(os.path.join(self.data_path, 
+                                                   dir_name, file_name))
+                    self.img_labels.append(label)
+        # For testing images add only the image
+        else:
+            files = os.listdir(self.data_path)
+            for file in files:
+                self.img_paths.append(os.path.join(self.data_path, file))
+
+        # Swapping the label map
+        self.label_map = {v: k for k, v in self.label_map.items()}

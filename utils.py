@@ -24,7 +24,8 @@ import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
+from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset, \
+                     ImageNet10
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
@@ -568,7 +569,7 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
         # Based on MobileNetV2 default transforms
         # Resizing because the images are quite large and not square
         transform = T.Compose([
-            T.Resize(256),
+            T.Resize((256, 256)),
             T.CenterCrop(224),
             T.ToTensor(),
             T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
@@ -583,6 +584,12 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
             T.ToTensor(),
             T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262])
         ])
+    elif dataset.__name__ == "ImageNet10":
+        transform = T.Compose([
+            T.Resize((128, 128)),
+            T.ToTensor(),
+            T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
+        ]) 
     return transform
 
 

@@ -4,84 +4,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+import torchvision.transforms as T
+from torch.utils.data import DataLoader, Dataset
 
 from utils import get_data_loaders, get_transforms, get_device, remove_predicts
-from datasets import NTZFilterDataset
-
-
-class DCGAN_generator(nn.Module):
-    def __init__(self):
-        super(DCGAN_generator, self).__init__()
-        self.nz = 100
-        self.ngf = 64
-        self.nc = 3
-        self.forward_call = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(self.nz, self.ngf * 8, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(self.ngf * 8),
-            nn.ReLU(True),
-            # Size = (ngf*8) x 4 x 4
-            nn.ConvTranspose2d(self.ngf * 8, self.ngf * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ngf * 4),
-            nn.ReLU(True),
-            # Size = (ngf*4) x 8 x 8
-            nn.ConvTranspose2d(self.ngf * 4, self.ngf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ngf * 2),
-            nn.ReLU(True),
-            # Size = (ngf*2) x 16 x 16
-            nn.ConvTranspose2d(self.ngf * 2, self.ngf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ngf),
-            nn.ReLU(True),
-            # Size = (ngf) x 32 x 32
-            nn.ConvTranspose2d(self.ngf, self.nc, 4, 2, 1, bias=False),
-            nn.Tanh()
-            # Size = (nc) x 64 x 64
-        )
-    
-
-    def forward(self, input):
-        return self.forward_call(input)
-    
-    
-class DCGAN_discriminator(nn.Module):
-    def __init__(self):
-        super(DCGAN_discriminator, self).__init__()
-        self.ndf = 64
-        self.nc = 3
-        self.forward_call = nn.Sequential(
-            # Input size is nc x 64 x 64
-            nn.Conv2d(self.nc, self.ndf, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            # Size = (ndf) x 32 x 32
-            nn.Conv2d(self.ndf, self.ndf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ndf * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            # Size = (ndf*2) x 16 x 16
-            nn.Conv2d(self.ndf * 2, self.ndf * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ndf * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            # Size = (ndf*4) x 8 x 8
-            nn.Conv2d(self.ndf * 4, self.ndf * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.ndf * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            # Size = (ndf*8) x 4 x 4
-            nn.Conv2d(self.ndf * 8, 1, 4, 1, 0, bias=False),
-            nn.Sigmoid()
-        )
-
-
-    def forward(self, input):
-        return self.forward_call(input)
+from datasets import NTZFilterDataset, CIFAR10Dataset
     
 
 class LSGAN_generator(nn.Module):
-    def __init__(self):
+    def __init__(self, img_size, channels, latent_dim):
         super(LSGAN_generator, self).__init__()
-        self.img_size = 64
-        self.latent_dim = 100
-        self.channels = 3
+        self.img_size = img_size
+        self.channels = channels
+        self.latent_dim = latent_dim
 
         self.init_size = self.img_size // 4
         self.l1 = nn.Sequential(nn.Linear(self.latent_dim, 128 * self.init_size ** 2))
@@ -107,10 +42,10 @@ class LSGAN_generator(nn.Module):
 
 
 class LSGAN_discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, img_size, channels):
         super(LSGAN_discriminator, self).__init__()
-        self.channels = 3
-        self.img_size = 64
+        self.img_size = img_size
+        self.channels = channels
 
         def discriminator_block(in_filters, out_filters, bn=True):
             block = [nn.Conv2d(in_filters, out_filters, 3, 2, 1), nn.LeakyReLU(0.2, inplace=True), nn.Dropout2d(0.25)]
@@ -137,42 +72,43 @@ class LSGAN_discriminator(nn.Module):
         return validity
 
 
-def split_loader(train_loader, standard_transform):
-    """This function takes the standard NTZfilterdataset loader
-    and splits it up into 4 new loaders, one for each class.
-    This is necessary to allow the DCGAN to generate images
+def split_loader(train_loader: DataLoader, standard_transform: T.Compose,
+                 dataset: str):
+    """This function takes the standard loader and splits
+    it up into n new loaders, one for each class in the dataset.
+    This is necessary to allow the GAN to generate images
     per class, not for the entire dataset. 
 
     Args:
-        train_loader: The standard NTZfilterdataset loader.
+        train_loader: The standard loader.
         standard_transform: no_augment transform.
     
     Returns:
-        List of 4 dataloaders.
+        List of dataloaders per class.
     """
     complete_dataset = train_loader.dataset
     dataset_paths = complete_dataset.img_paths
     datasets = []
     data_loaders = []
-    NTZ_path = os.path.join("data", "NTZFilter", "train")
+    path = os.path.join("data", dataset.removesuffix("Dataset"), "train")
 
     # Creating 4 datasets based on standard NTZFilter setup
     # But removing image paths and image labels
     for idx in range(len(complete_dataset.label_map)):
-        dataset = NTZFilterDataset(NTZ_path, standard_transform)
-        dataset.img_paths = []
-        dataset.img_labels = []
-        datasets.append(dataset)
+        sep_dataset = eval(dataset)(path, standard_transform)
+        sep_dataset.img_paths = []
+        sep_dataset.img_labels = []
+        datasets.append(sep_dataset)
     
-    # Adding labels/img_paths to the 4 datasets
+    # Adding labels/img_paths to the datasets
     for idx, img_path in enumerate(dataset_paths):
         label = complete_dataset.img_labels[idx]
         datasets[label].img_paths.append(img_path)
         datasets[label].img_labels.append(label)
         
     # Creating dataloaders for each class
-    for dataset in datasets:
-        data_loaders.append(DataLoader(dataset, batch_size = 
+    for sep_dataset in datasets:
+        data_loaders.append(DataLoader(sep_dataset, batch_size = 
                                        train_loader.batch_size,
                                        collate_fn = train_loader.collate_fn,
                                        shuffle = True,
@@ -180,8 +116,8 @@ def split_loader(train_loader, standard_transform):
     return data_loaders
 
 
-def generate_images(gen_model: DCGAN_generator, n_imgs: int, nz: int,
-                    device: torch.device, path: str):
+def generate_images(gen_model: LSGAN_generator, n_imgs: int, nz: int,
+                    device: torch.device, path: str, normalize: T.Normalize):
     """This function takes a generative model, provides noise
     data for it, which it then uses to generate n_imgs amount
     of images that are similar to the dataset trained on.
@@ -197,7 +133,7 @@ def generate_images(gen_model: DCGAN_generator, n_imgs: int, nz: int,
     gen_model.eval()
 
     # Generate random noise
-    noise = torch.randn(n_imgs, nz, 1, 1, device = device)
+    noise = torch.randn(n_imgs, nz, device = device)
 
     # Generate fake images
     fake_images = gen_model(noise).cpu()
@@ -205,10 +141,17 @@ def generate_images(gen_model: DCGAN_generator, n_imgs: int, nz: int,
     # Check if the directory exits, remove old images if it does.
     remove_predicts(path)
 
+    # Make an inverse normalization transform
+    mean = normalize.mean
+    std = normalize.std
+    inverse_mean = [-m/s for m, s in zip(mean, std)]
+    inverse_std = [1/s for s in std]
+    inverse_normalize = T.Normalize(mean = inverse_mean, std = inverse_std)
+
     # Converting to PIL and saving image
-    to_PIL = transforms.ToPILImage()
+    post_process = T.Compose([inverse_normalize, T.ToPILImage()])
     for idx, img in enumerate(fake_images):
-        pil_image = to_PIL(img)
+        pil_image = post_process(img)
         
         # Save PIL image to disk
         pil_image.save(os.path.join(path, ("gen_img_" + str(idx) + ".png")))
@@ -231,10 +174,10 @@ def weights_init(model: nn.Module):
         nn.init.constant_(model.bias.data, 0)
 
 
-def train_DCGAN(gen_model: DCGAN_generator, disc_model: DCGAN_discriminator,
-                train_loader: DataLoader, criterion: nn.BCELoss,
-                optimizer_gen: optim.Adam, optimizer_disc: optim.Adam,
-                device: torch.device, nz: int):
+def train_GAN(gen_model: LSGAN_generator, disc_model: LSGAN_discriminator,
+              train_loader: DataLoader, criterion: nn.BCELoss,
+              optimizer_gen: optim.Adam, optimizer_disc: optim.Adam,
+              device: torch.device, nz: int, epochs: int):
     """This function takes a generator and a discriminator of a
     GAN setup and trains them both to produce generative data.
 
@@ -247,10 +190,10 @@ def train_DCGAN(gen_model: DCGAN_generator, disc_model: DCGAN_discriminator,
         optimizer_disc: The optimizer for the discriminator.
         device: The device to use.
         nz: The size of the latent vector.
+        epochs: Amount of epochs to train for.
     """
     real_label = 1
     fake_label = 0
-    epochs = 300
 
     # Setting models to training mode
     gen_model.train()
@@ -263,7 +206,8 @@ def train_DCGAN(gen_model: DCGAN_generator, disc_model: DCGAN_discriminator,
     # Main training loop
     for epoch in range(epochs):
         print("Epoch " + str(epoch))
-        disc_loss = 0
+        disc_loss_epoch = 0
+        gen_loss_epoch = 0
         for input, _ in tqdm(train_loader):
             # First part consists of updating the discriminator
             # Removing previous gradients
@@ -281,7 +225,7 @@ def train_DCGAN(gen_model: DCGAN_generator, disc_model: DCGAN_discriminator,
             disc_loss_real.backward()
 
             # Training with fake data batch
-            noise = torch.randn(batch_size, nz, 1, 1, device = device)
+            noise = torch.randn(batch_size, nz, device = device)
             fake_data = gen_model(noise)
             labels.fill_(fake_label)
             
@@ -305,43 +249,57 @@ def train_DCGAN(gen_model: DCGAN_generator, disc_model: DCGAN_discriminator,
             gen_loss.backward()
             optimizer_gen.step()
             
-            disc_loss += disc_loss_real.item() + disc_loss_fake.item()
-        # Printing average loss over epoch to console, should converge to 0.5
-        print("Discriminator loss: " + str(round(disc_loss/len(train_loader), 4)))
+            disc_loss_epoch += disc_loss_real.item() + disc_loss_fake.item()
+            gen_loss_epoch += gen_loss.item()
+
+        # Printing average discriminator and generator loss over epoch
+        # Discriminator loss should converge to 0.5
+        # Generator loss should reduce during training
+        print("Discriminator loss: " + str(round(disc_loss_epoch/len(train_loader), 4))
+              + "\tGenerator loss: " + str(round(gen_loss_epoch/len(train_loader), 4)))
 
     return gen_model
 
 
-def setup_DCGAN(train_type: str, n_imgs: int, latent_vector_size: int):
-    """Function that sets up a DCGAN model. The function prepares
+def setup_GAN(train_type: str, n_imgs: int, latent_vector_size: int,
+              dataset: str, epochs: int):
+    """Function that sets up a GAN model. The function prepares
     a training phase and afterwards takes n images generated by the
     model as synthetic data. The only data this is useful for is the 
-    NTZ dataset. DCGAN definitions based on Pytorch tutorial:
-    https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
-    and DCGAN paper:
-    https://arxiv.org/abs/1511.06434
-    NOTE: If using DCGAN change T.CenterCrop(224) to T.CenterCrop(64),
-    in utils.py, get_default_transforms function. Since DCGAN is not used
-    further, this was not adapted.
-
-    LSGAN definitions taken from 
+    NTZ dataset. LSGAN definitions taken from 
     https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/lsgan/lsgan.py
-
+    
     Args:
         train_type: Train GAN on class data combined or seperate.
         n_imgs: The amount of images to generate.
         latent_vector_size: The size of the latent vector, synonym to nz.
+        dataset: The dataset to use.
+        epochs: The amount of epochs to train for.
     """    
     # Setting device to use
     device = get_device()
 
-    # Getting NTZ filter data 
+    # Getting data
     standard_transform = get_transforms(transform_type = "no_augment")
-    complete_train_loader = get_data_loaders(transform = standard_transform)["train"]
+    complete_train_loader = get_data_loaders(transform = standard_transform,
+                                             dataset = eval(dataset))["train"]
+    normalize = standard_transform.transforms[-1]
 
-    # Splitting up into 4 classes if desired training type
+    # Depending on the dataset, the amount of channels and image size should be set
+    batch = next(iter(complete_train_loader))
+    img_size = batch[0][0].size(1)
+    channels = batch[0][0].size(0)
+    latent_dim = 100
+    dataset_name = dataset.removesuffix("Dataset") + "Generative"
+
+    # Create directory if it does not exist
+    if not os.path.exists(os.path.join("data", dataset_name)):
+        os.mkdir(os.path.join("data", dataset_name))
+
+    # Splitting up into classes if desired training type
     if train_type == "seperate":
-        train_loaders = split_loader(complete_train_loader, standard_transform)
+        train_loaders = split_loader(complete_train_loader, standard_transform,
+                                     dataset)
         class_names = complete_train_loader.dataset.label_map
     else:
         train_loaders = [complete_train_loader]
@@ -349,17 +307,14 @@ def setup_DCGAN(train_type: str, n_imgs: int, latent_vector_size: int):
 
     for idx, train_loader in enumerate(train_loaders):
         # Setup generator and discriminator
-        #gen_model = DCGAN_generator()
-        #disc_model = DCGAN_discriminator()
-        gen_model = LSGAN_generator()
-        disc_model = LSGAN_discriminator()
+        gen_model = LSGAN_generator(img_size, channels, latent_dim)
+        disc_model = LSGAN_discriminator(img_size, channels)
 
         # Setting their weights to mean 0 and std dev = 0.02
         gen_model.apply(weights_init)
         disc_model.apply(weights_init)
 
         # Setting criterion
-        #criterion = nn.BCELoss()
         criterion = nn.MSELoss()
 
         # Setup Adam optimizers for both G and D
@@ -368,20 +323,25 @@ def setup_DCGAN(train_type: str, n_imgs: int, latent_vector_size: int):
         optimizer_disc = optim.Adam(disc_model.parameters(), lr = 0.0002,
                                     betas = (0.5, 0.999))
 
-        gen_model = train_DCGAN(gen_model, disc_model, train_loader, criterion, optimizer_gen,
-                                optimizer_disc, device, latent_vector_size)
+        gen_model = train_GAN(gen_model, disc_model, train_loader, criterion, optimizer_gen,
+                                optimizer_disc, device, latent_vector_size, epochs)
         
         class_name = class_names[idx]
-        path = os.path.join("data", "NTZFilterGenerative", class_name)
-        generate_images(gen_model, n_imgs, latent_vector_size, device, path)
+        path = os.path.join("data", dataset_name, class_name)
+        generate_images(gen_model, n_imgs, latent_vector_size, device, path, normalize)
+
 
 if __name__ == '__main__':
     # Forming argparser with optional arguments for training type,
     # amount of images and latent vector size
     parser = argparse.ArgumentParser()
-    parser.add_argument("train_type", type = str, default = "seperate",
+    parser.add_argument("train_type", type = str,
                         choices = ["seperate", "combined"])
+    parser.add_argument("dataset", type = str,
+                        choices = ["NTZFilterDataset", "CIFAR10Dataset"])
     parser.add_argument("--n_imgs", type = int, default = 50)
     parser.add_argument("--latent_vector_size", type = int, default = 100)
+    parser.add_argument("--epochs", type = int, default = 100)
     args = parser.parse_args()
-    setup_DCGAN(args.train_type, args.n_imgs, args.latent_vector_size)
+    setup_GAN(args.train_type, args.n_imgs, args.latent_vector_size, 
+              args.dataset, args.epochs),
