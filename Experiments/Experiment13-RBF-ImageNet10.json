@@ -5,8 +5,9 @@
     "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [25, 50, 75], gamma = 0.2)",
     "dataset": "ImageNet10",
     "epochs": "100",
-    "batch_size": "32",
+    "batch_size": "64",
     "augmentation": "no_augment",
     "RBF_flag": "True",
+    "gp_const": "0.5",
     "early_limit": "0"
 }

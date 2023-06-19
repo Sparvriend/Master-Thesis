@@ -156,7 +156,7 @@ class TinyImageNet200Dataset(ProjDataset):
         self.label_map = {v: k for k, v in self.label_map.items()}
 
 
-class ImageNet10(ProjDataset):
+class ImageNet10Dataset(ProjDataset):
     def __init__(self, data_path: str, transform: T.Compose):
         super().__init__(data_path, transform)
         classes = os.listdir(os.path.join("data", "ImageNet10", "train"))

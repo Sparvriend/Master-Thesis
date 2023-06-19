@@ -25,7 +25,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset, \
-                     ImageNet10
+                     ImageNet10Dataset
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
@@ -584,9 +584,9 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
             T.ToTensor(),
             T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262])
         ])
-    elif dataset.__name__ == "ImageNet10":
+    elif dataset.__name__ == "ImageNet10Dataset":
         transform = T.Compose([
-            T.Resize((128, 128)),
+            T.Resize((256, 256)),
             T.ToTensor(),
             T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
         ]) 

@@ -1,5 +1,5 @@
 {
-    "model": "resnet18()", 
+    "model": "shufflenet_v2_x1_0()", 
     "criterion": "nn.BCELoss()", 
     "optimizer": "optim.SGD(hyp_dict[\"model\"].parameters(), lr = 0.05, momentum = 0.9, weight_decay = 0.0005)",
     "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [25, 50, 75], gamma = 0.2)",
@@ -8,5 +8,6 @@
     "batch_size": "128",
     "augmentation": "simple",
     "RBF_flag": "True",
+    "gp_const": "None",
     "early_limit": "0"
 }

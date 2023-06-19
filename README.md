@@ -3,15 +3,14 @@
 ## TODO in order of priority
 * TODO: Create synthetic data  
       -> Comparison study of GANS/Diffusion models vs. handcrafted synthetic data  
+      -> Finish up synthetic_data.py (small improvements)  
       -> Can LSGAN training be improved such that it becomes stable?
-      -> See if the LSGAN works on CIFAR10: Reduce the dataset size each time to see after how many images the DCGAN training becomes unstable.  
 * TODO: Finish explainability of the model  
       -> For DUQ + explainability, use ImageNet10 for better visibility of explainability.
       -> Look into converting MobileNetV2/EfficientNetB1/ShuffleNetV2 to DUQ version similar to how ResNet18 is converted
             -> maxpool/conv1 adaptation. See Joost email
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability   
-* TODO: Finish up synthetic_data.py (small improvements)
 * TODO: Add the same random seed to any file that uses a randomized function (including shuffle) -> For Pytorch, Random and Numpy. 
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         

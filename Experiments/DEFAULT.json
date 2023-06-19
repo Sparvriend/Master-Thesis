@@ -11,6 +11,7 @@
     "augmentation": "rand_augment",
     "PFM_flag": "{\"Terminal\": False, \"Tensorboard\": True}",
     "RBF_flag": "False",
+    "gp_const": "None",
     "early_limit": "10",
     "replacement_limit": "0"
 }

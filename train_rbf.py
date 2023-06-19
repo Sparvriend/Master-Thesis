@@ -13,6 +13,8 @@ from utils import get_transforms, setup_tensorboard, get_data_loaders, \
                   setup_hyp_file, get_device
 
 
+from torchinfo import summary
+
 class RBF_model(nn.Module):
     """RBF layer definition based on Joost van Amersfoort's implementation
     of Determenistic Uncertainty Quantification (DUQ):
@@ -57,13 +59,14 @@ class RBF_model(nn.Module):
     which it can then compare to new inputs during inference time. The
     distance to the closest centroid is the uncertainty metric.
     """
-    def __init__(self, fe, in_features, out_features, device):
+    def __init__(self, fe, in_features, out_features, device, gp_const, batch_size):
         super(RBF_model, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.sigma = 0.1
         self.gamma = 0.999
         self.device = device
+        self.gp_const = gp_const
 
         # Initializing kernels centroid embedding
         # Set the feature extractor after the initialization of the kernels!
@@ -73,7 +76,7 @@ class RBF_model(nn.Module):
         nn.init.kaiming_normal_(self.kernels, nonlinearity = 'relu')
         self.fe = fe
 
-        self.N = (torch.zeros(out_features) + 13).to(device)
+        self.N = (torch.zeros(out_features) + (batch_size/out_features)).to(device)
         self.m = torch.zeros(in_features, out_features).to(device)
         self.m *= self.N
         
@@ -137,9 +140,6 @@ class RBF_model(nn.Module):
             inputs: Model inputs.
             model_output: Predicted labels given input.
         """
-        # Gradient penalty constant, taken from DUQ paper
-        gp_const = 0.5
-
         # First getting gradients
         gradients = self.get_gradients(inputs, model_output)
 
@@ -149,10 +149,11 @@ class RBF_model(nn.Module):
         # Applying the 2 sided penalty
         grad_pen = ((L2_norm - 1) ** 2).mean()
 
-        return grad_pen * gp_const
+        return grad_pen * self.gp_const
 
 
-def set_rbf_model(model: torchvision.models, classes: int, device: torch.device):
+def set_rbf_model(model: torchvision.models, classes: int, device: torch.device,
+                  gp_const: float, batch_size: int):
     """This function takes a Pytorch deep Learning model, finds its
     classification layer and then converts that to an RBF layer.
 
@@ -170,14 +171,16 @@ def set_rbf_model(model: torchvision.models, classes: int, device: torch.device)
         model._modules[name][idx] = torch.nn.Identity()
     else:
         model._modules[name] = torch.nn.Identity()
-    model = RBF_model(model, in_features, classes, device)
+    model = RBF_model(model, in_features, classes, device, gp_const, batch_size)
     return model
 
 
 def preprocess_model(model: torchvision.models):
     """Function that takes care of converting convolutional
     and maxpooling layers to appropriate versions for usage
-    in DUQ.
+    in DUQ. This should only happen if the dataset is
+    CIFAR10, since the models reduce the images to too small
+    size, CIFAR10 is already small (32x32).
     
     Args:
         model: Pytorch deep learning model.
@@ -186,10 +189,17 @@ def preprocess_model(model: torchvision.models):
         Model adapted appropriate for DUQ.
     """
     if model.__class__.__name__ == "ResNet":
-        model.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.conv1 = torch.nn.Conv2d(3, 64, kernel_size = 3, stride = 1, padding = 1, bias = False)
         model.maxpool = torch.nn.Identity()
-    # Other model types should later also be included here
+    if model.__class__.__name__ == "MobileNetV2":
+       model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1, padding = 1, bias = False)
+    if model.__class__.__name__ == "EfficientNet":
+        model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1, padding = 1, bias = False)
+    if model.__class__.__name__ == "ShuffleNetV2":
+        model.conv1[0] = torch.nn.Conv2d(3, 24, kernel_size = 3, stride = 1, padding = 1, bias = False)
+        model.maxpool = torch.nn.Identity()
     return model
+
 
 def train_duq(experiment_name: str):
     """Function used for training a model with DUQ.
@@ -225,8 +235,9 @@ def train_duq(experiment_name: str):
     # Getting the model and converting to RBF
     model = args.model
     classes = data_loaders["train"].dataset.n_classes
-    model = preprocess_model(model)
-    model = set_rbf_model(model, classes, device)
+    if args.dataset.__name__ == "CIFAR10Dataset":
+        model = preprocess_model(model)
+    model = set_rbf_model(model, classes, device, args.gp_const, args.batch_size)
     model.to(device)
     
     # Setting up metrics
@@ -263,7 +274,8 @@ def train_duq(experiment_name: str):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
-                inputs.requires_grad_(True)
+                if args.gp_const != None:
+                    inputs.requires_grad_(True)
 
                 # Get model outputs, convert labels to one hot for
                 # calculating BCE loss and updating centroids
@@ -277,8 +289,9 @@ def train_duq(experiment_name: str):
 
                 # Updating model weights if in training phase
                 if phase == "train":
-                    grad_pen = model.get_grad_pen(inputs, model_output)
-                    loss += grad_pen
+                    if args.gp_const != None:
+                        grad_pen = model.get_grad_pen(inputs, model_output)
+                        loss += grad_pen
                     # Backwards pass and updating optimizer
                     loss.backward()
                     args.optimizer.step()
