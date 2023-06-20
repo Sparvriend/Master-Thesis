@@ -7,8 +7,6 @@
       -> Can LSGAN training be improved such that it becomes stable?
 * TODO: Finish explainability of the model  
       -> For DUQ + explainability, use ImageNet10 for better visibility of explainability.
-      -> Look into converting MobileNetV2/EfficientNetB1/ShuffleNetV2 to DUQ version similar to how ResNet18 is converted
-            -> maxpool/conv1 adaptation. See Joost email
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability   
 * TODO: Add the same random seed to any file that uses a randomized function (including shuffle) -> For Pytorch, Random and Numpy. 

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-from PIL import Image
+from PIL import Image, ImageDraw
 import random
 import time
 import torchvision.transforms as T
@@ -43,8 +43,7 @@ def create_synthetic_data_dirs(class_names: list):
             os.mkdir(dir_path)
             dir_path = os.path.join(synthetic_data_ex_path, class_name)
             os.mkdir(dir_path)
-    else:
-        pass
+
             
 def get_removed_label(class_names: list, data_types: list):
     """Function that does two primary things: 1. Matching the class template
@@ -295,14 +294,14 @@ def paint_rect_edges(img, top_left, bottom_right, edge_width, radius):
 def generate_synthetic_data(class_names: list, n_data: int):
     # Getting a list of all filter images and subsetting
     all_filters = os.listdir(FILTER_SELECTED_PATH)
-    subset_filters = random.sample(all_filters, n_data * len(class_names))
+    subset_filters = np.random.choice(all_filters, size = n_data * len(class_names))
 
     # Backgrounds
     backgrounds = os.listdir(BACKGROUNDS_PATH)
     
     for i, class_name in enumerate(class_names):
         class_labels = os.listdir(os.path.join(CLASS_LABELS_PATH, class_name))
-        subset_class_labels = random.sample(class_labels, n_data)
+        subset_class_labels = np.random.choice(class_labels, size = n_data)
         for j, class_label in enumerate(subset_class_labels):
             # Paste the class label randomly somewhere on the filter
             # But restricted, such that it does fall in the right area
@@ -323,11 +322,12 @@ def generate_synthetic_data(class_names: list, n_data: int):
                         mask[y, x] = 255
             class_label_img.putalpha(Image.fromarray(mask))
             
-            # Randomly selecting filter location
+            # Randomly selecting label on filter location
             w_label, h_label = class_label_img.size
             w_filter, h_filter = filter_img.size
-            x = random.randint(0, w_filter - w_label)
-            y = random.randint(0, h_filter - h_label)
+            pix_to_edge = 15
+            x = random.randint(pix_to_edge, w_filter - w_label - pix_to_edge)
+            y = random.randint(pix_to_edge, h_filter - h_label - pix_to_edge)
 
             # Applying random rotation and random horizontal flip transformation
             # Then pasting on the filter
@@ -360,11 +360,75 @@ def generate_synthetic_data(class_names: list, n_data: int):
                                              "example_" + str(i*len(class_names) + j) + ".png"))
 
 
-def active_contours():
-    # Uses active contours models
-    # https://scikit-image.org/docs/stable/auto_examples/edges/plot_active_contours.html
-    print("Not implemented yet.")
+def check_incorrect_match(x_range, y_range, image, top_left, threshold):
+    # Working with a grey image to check the intensity
+    grey_image = image.convert("L")
+    pixels = 0
+    # Looping over pixels
+    for x in x_range:
+        for y in y_range:
+            point_x = top_left[0] + x
+            point_y = top_left[1] + y 
+            if grey_image.getpixel((point_x, point_y)) < threshold:
+                # The pixel is likely a cylinder print pixel
+                pixels += 1
+    return pixels
 
+
+def test():
+    # This function replaces get_selected_filter()
+    # TODO: Add label checking in the middle, since that is included in get_selected_filter()
+    # TODO: Find a way to combine the two matched templates (This can probably be done with opacity)
+    # TODO: Replace incorrect match checks with the check_incorrect_match() function
+    # TODO: After extraction of the image, do a personal check of the extracted images
+    # to see which one were done correctly and which ones were not.
+
+    files = os.listdir(FILTER_REMOVED_PATH)
+    cutoff_template = Image.open(os.path.join(TEMPLATE_PATH, "filter_cutoff_template.png"))
+    succes_count = 0
+
+    # Create cylinder template list
+    cylinder_templates = ["filter_cylinder_template_l3.png", "filter_cylinder_template_r.png"]
+
+    # New idea:
+    # Template match the filter (only the filter not the black thing in it)
+    # And the black thing that sticks out of the edges, seperately
+    # Then combine those two images
+
+    for file in files:
+        img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
+        draw = ImageDraw.Draw(img)
+
+        # The cutoff template is almost always (at least partially) correct
+        top_left_f, bottom_right_f = get_template_match(img, cutoff_template)
+
+        for cylinder_template_name in cylinder_templates:
+            cylinder_template = Image.open(os.path.join(TEMPLATE_PATH, cylinder_template_name))
+            top_left_c, bottom_right_c = get_template_match(img, cylinder_template)
+
+            x_range = list(range(bottom_right_c[0] - top_left_c[0]))
+            y_range = list(range(bottom_right_c[1] - top_left_c[1]))
+
+            # Checking for an incorrect match
+            threshold = 60
+            cylinder_pixels = check_incorrect_match(x_range, y_range, img, top_left_c, threshold)
+
+            if cylinder_pixels > 200:
+                # Drawing the cylinder rectangle only on an accurate match, otherwise do not draw it
+                draw.rectangle((top_left_c[0], top_left_c[1], bottom_right_c[0], bottom_right_c[1]), outline = "green", width = 2)
+                succes_count += 1
+                break
+
+        # Drawing the filter rectangle
+        draw.rectangle((top_left_f[0], top_left_f[1], bottom_right_f[0], bottom_right_f[1]), outline = "blue", width = 2)
+        img.save(os.path.join("data", "NTZFilterSynthetic", "test", file + "_test" + ".bmp"))
+
+        print(file)
+        print(cylinder_pixels)
+        print("\n")
+
+    print("Succesful template matches = " + str(succes_count) + "/" + str(len(files)))
+        
 
 def setup_data_generation():
     # Creating synthetic data pipeline:
@@ -383,26 +447,25 @@ def setup_data_generation():
     # Applying inpainting around the rectangle that is pasted on the image
     # (Applied after each pasting step)
 
-    # TODO: When pasting the class label onto the filter
-    # ensure that it is a certain pixel width from the edges
-    # (width and height) of the filter.
-
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]
     data_types = ["train", "val", "test"]
     start_time = time.time()
 
-    print("Creating Synthetic data directories")
-    create_synthetic_data_dirs(class_names)
-    print("Getting class labels and saving filters without labels")
-    get_removed_label(class_names, data_types) # Steps 1-3
-    print("Matching filters")
-    get_selected_filter() # Steps 4-5
-    print("Generating Synthetic data")
-    generate_synthetic_data(class_names, 5) # Step 7-8
+    # print("Creating Synthetic data directories")
+    # create_synthetic_data_dirs(class_names)
+    # print("Getting class labels and saving filters without labels")
+    # get_removed_label(class_names, data_types) # Steps 1-3
+    # print("Matching filters")
+    # get_selected_filter() # Steps 4-5
+    # print("Generating Synthetic data")
+    # generate_synthetic_data(class_names, 25) # Step 7
+
+    test()
 
     # Recording total time passed
+    # Steps 1-3 take about 9 minutes, the other steps take much less time.
     elapsed_time = time.time() - start_time
     print("Total data generation time (H/M/S) = ", 
           time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
