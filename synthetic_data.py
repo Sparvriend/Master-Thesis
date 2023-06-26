@@ -370,15 +370,15 @@ def check_incorrect_match(x_range, y_range, image, top_left, threshold):
             point_x = top_left[0] + x
             point_y = top_left[1] + y 
             if grey_image.getpixel((point_x, point_y)) < threshold:
-                # The pixel is likely a cylinder print pixel
                 pixels += 1
     return pixels
 
 
 def test():
-    # This function replaces get_selected_filter()
-    # TODO: Add label checking in the middle, since that is included in get_selected_filter()
-    # TODO: Find a way to combine the two matched templates (This can probably be done with opacity)
+    # THIS FUNCTION REPLACES get_selected_filter()
+    # TODO: In generate_synthetic_data, only print the label in the confines of the coordinates given in
+    # the filter_coordinates dictionary for the file. Also, only print any pixels that are not completely
+    # black (0, 0, 0) - see putalpha in generate_synthetic_data how to do that with opacity.
     # TODO: Replace incorrect match checks with the check_incorrect_match() function
     # TODO: After extraction of the image, do a personal check of the extracted images
     # to see which one were done correctly and which ones were not.
@@ -386,21 +386,23 @@ def test():
     files = os.listdir(FILTER_REMOVED_PATH)
     cutoff_template = Image.open(os.path.join(TEMPLATE_PATH, "filter_cutoff_template.png"))
     succes_count = 0
+    filter_coordinates = {}
 
     # Create cylinder template list
-    cylinder_templates = ["filter_cylinder_template_l3.png", "filter_cylinder_template_r.png"]
-
-    # New idea:
-    # Template match the filter (only the filter not the black thing in it)
-    # And the black thing that sticks out of the edges, seperately
-    # Then combine those two images
+    cylinder_templates = ["filter_cylinder_template_r.png", "filter_cylinder_template_l1.png",
+                          "filter_cylinder_template_l2.png"]
 
     for file in files:
         img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
-        draw = ImageDraw.Draw(img)
 
         # The cutoff template is almost always (at least partially) correct
         top_left_f, bottom_right_f = get_template_match(img, cutoff_template)
+        filter_coordinates[file] = (top_left_f, bottom_right_f)
+
+        # It can sometimes happen that the label on the filter is removed
+        # incorrectly in get_removed_label, but those are often not selected
+        # anyway in this procedure, if in the future that changes, see old commits
+        # for a method on how to solve that.
 
         for cylinder_template_name in cylinder_templates:
             cylinder_template = Image.open(os.path.join(TEMPLATE_PATH, cylinder_template_name))
@@ -410,24 +412,52 @@ def test():
             y_range = list(range(bottom_right_c[1] - top_left_c[1]))
 
             # Checking for an incorrect match
-            threshold = 60
-            cylinder_pixels = check_incorrect_match(x_range, y_range, img, top_left_c, threshold)
+            cylinder_pixels = check_incorrect_match(x_range, y_range, img, top_left_c, threshold = 60)
 
             if cylinder_pixels > 200:
-                # Drawing the cylinder rectangle only on an accurate match, otherwise do not draw it
-                draw.rectangle((top_left_c[0], top_left_c[1], bottom_right_c[0], bottom_right_c[1]), outline = "green", width = 2)
-                succes_count += 1
-                break
+                # If the match is accurate, combine the two rectangles
+                top_left_cc = (min(top_left_f[0], top_left_c[0]), min(top_left_f[1], top_left_c[1]))
+                bottom_right_cc = (max(bottom_right_f[0], bottom_right_c[0]), max(bottom_right_f[1], bottom_right_c[1]))
 
-        # Drawing the filter rectangle
-        draw.rectangle((top_left_f[0], top_left_f[1], bottom_right_f[0], bottom_right_f[1]), outline = "blue", width = 2)
-        img.save(os.path.join("data", "NTZFilterSynthetic", "test", file + "_test" + ".bmp"))
+                # Creating a new image to draw the two rectangles on
+                width = bottom_right_cc[0] - top_left_cc[0]
+                height = bottom_right_cc[1] - top_left_cc[1]
+                combined = Image.new('RGB', (width, height), (0, 0, 0))
 
-        print(file)
-        print(cylinder_pixels)
-        print("\n")
+                # Filter image crop and paste
+                area_f = img.crop((top_left_f[0], top_left_f[1], bottom_right_f[0], bottom_right_f[1]))
+                combined.paste(area_f, (top_left_f[0] - top_left_cc[0], top_left_f[1] - top_left_cc[1]))
+
+                # Black cylinder image crop and paste
+                area_c = img.crop((top_left_c[0], top_left_c[1], bottom_right_c[0], bottom_right_c[1]))
+                combined.paste(area_c, (top_left_c[0] - top_left_cc[0], top_left_c[1] - top_left_cc[1]))
+
+                # Add in the space between the two template matches, if it is not connected
+                # This is the cylinder template on the right side case
+                if top_left_f[0] != 0 and bottom_right_f[0] != top_left_c[0]:
+                    top_left_i = (bottom_right_f[0], top_left_c[1])
+                    bottom_right_i = bottom_right_c
+                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
+                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
+
+                # Cylinder template on the left side case
+                if bottom_right_f[0] != 0 and top_left_f[0] != bottom_right_c[0]:
+                    top_left_i = (bottom_right_c[0], top_left_c[1])
+                    bottom_right_i = (top_left_f[0], bottom_right_c[1])
+                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
+                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
+
+                # Perform a final check to remove incorrect template matches
+                x_range = list(range(width))
+                y_range = list(range(height))
+                black_pixels = check_incorrect_match(x_range, y_range, combined, [0, 0], threshold = 1)
+                if black_pixels < 1500:
+                    succes_count += 1
+                    combined.save(os.path.join("data", "NTZFilterSynthetic", "test", file + "_test" + ".bmp"))
+                    break
 
     print("Succesful template matches = " + str(succes_count) + "/" + str(len(files)))
+    return filter_coordinates
         
 
 def setup_data_generation():
@@ -462,7 +492,7 @@ def setup_data_generation():
     # print("Generating Synthetic data")
     # generate_synthetic_data(class_names, 25) # Step 7
 
-    test()
+    filter_coordinates = test()
 
     # Recording total time passed
     # Steps 1-3 take about 9 minutes, the other steps take much less time.

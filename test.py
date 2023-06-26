@@ -11,6 +11,7 @@ from tqdm import tqdm
 from utils import get_data_loaders, save_test_predicts, remove_predicts, \
                   cutoff_date, get_device    
 from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
+from train_rbf import RBF_model
 
 TRTFLAG = True
 try:
@@ -19,9 +20,9 @@ except ModuleNotFoundError:
     TRTFLAG = False
 
 
-def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
+def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int, img_size: int):
     """This function takes a PyTorch model and converts it to a TensorRT model.
-    It creates a config file with a custom profile since the batch size.
+    It creates a config file with a custom profile since the batch size can be variable
 
     Args:
         model: Pytorch model to convert
@@ -33,13 +34,13 @@ def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int):
     # Using a trt builder to create a config and a profile
     # Which is necessary because the batch size is variable
     # It can change at the end, if the dataset size is not divisible by the batch size
-    norm_shape = (batch_size, 3, 224, 224)
+    norm_shape = (batch_size, 3, img_size, img_size)
     builder = trt.Builder(trt.Logger())
     config = builder.create_builder_config()
     profile = builder.create_optimization_profile()
 
     # Creating the profile shape and adding to config
-    profile.set_shape("input_tensor", min = (data_len % batch_size, 3, 224, 224),
+    profile.set_shape("input_tensor", min = (data_len % batch_size, 3, img_size, img_size),
                        max = norm_shape, opt = norm_shape)
     config.add_optimization_profile(profile)
     
@@ -170,6 +171,16 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False):
     # Creating the dataset and transferring to a DataLoader
     test_loader = get_data_loaders(batch_size, dataset = dataset)["test"]
 
+    # Depending on the dataset, the sizes of images are variable
+    if dataset.__name__ == "NTZFilterDataset":
+        img_size = 224
+    elif dataset.__name__ == "CIFAR10Dataset":
+        img_size = 32
+    elif dataset.__name__ == "TinyImageNet200Dataset":
+        img_size = 64
+    elif dataset.__name__ == "ImageNet10Dataset":
+        img_size = 256
+
     # Optionally, port the model to TRT version
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
     # Takes ~30 seconds for MobileNetV2 - ~5 mins for EfficientNetB1
@@ -178,7 +189,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False):
             print("torch2trt library not on device, skipping trt conversion")
         else:
             print("Converting model to trt model")
-            model = convert_to_trt(model, len(test_loader.dataset), batch_size)
+            model = convert_to_trt(model, len(test_loader.dataset), batch_size, img_size)
 
     # Testing the model on testing data
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,

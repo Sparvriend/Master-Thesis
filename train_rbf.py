@@ -13,8 +13,6 @@ from utils import get_transforms, setup_tensorboard, get_data_loaders, \
                   setup_hyp_file, get_device
 
 
-from torchinfo import summary
-
 class RBF_model(nn.Module):
     """RBF layer definition based on Joost van Amersfoort's implementation
     of Determenistic Uncertainty Quantification (DUQ):
