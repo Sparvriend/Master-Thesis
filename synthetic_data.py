@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-from PIL import Image, ImageDraw
+from PIL import Image
 import random
 import time
 import torchvision.transforms as T
@@ -70,15 +70,12 @@ def get_removed_label(class_names: list, data_types: list):
                 # Cropping and saving the resulting bounding box with the label
                 label_box = img.crop((top_left[0], top_left[1], bottom_right[0], bottom_right[1]))
 
-                # Counting the amount of label pixels
-                label_pixels = np.array(label_box.convert("L"))
-                label_count = 0
-                for y in range(label_pixels.shape[0]):
-                    for x in range(label_pixels.shape[1]):
-                        if label_pixels[y, x] < 220:
-                            label_count += 1
+                x_range = list(range(label_box.size[0]))
+                y_range = list(range(label_box.size[1]))
+                label_pixels = check_incorrect_match(x_range, y_range, label_box, lambda x: x < 220)
+
                 # If not within this range, template matching failed
-                if label_count < 3000 and label_count > 1000:
+                if label_pixels < 3000 and label_pixels > 1000:
                     label_box.save(os.path.join(CLASS_LABELS_PATH, class_name, file))
 
                     # Only taking filters from fail_label_not_fully_printed and no_fail
@@ -92,7 +89,180 @@ def get_removed_label(class_names: list, data_types: list):
                         img.save(img_destination)
 
 
-def get_template_match(img, template):
+def get_selected_filter():
+    """This function takes all filters with their labels removed from them
+    applies normalized pattern matching to each filter to see where in the image
+    the filter is located. A subset of those filters is then saved as a filter image
+    in the filters_selected directory. Cylinder and filter templates are split up
+    and cylinder templates are matched multiple times to get the best result.
+    """
+    files = os.listdir(FILTER_REMOVED_PATH)
+    cutoff_template = Image.open(os.path.join(TEMPLATE_PATH, "filter_cutoff_template.png"))
+    succes_count = 0
+    filter_coordinates = {}
+
+    # Create cylinder template list
+    cylinder_templates = ["filter_cylinder_template_r.png", "filter_cylinder_template_l1.png",
+                          "filter_cylinder_template_l2.png"]
+
+    for file in files:
+        img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
+
+        # The cutoff template is almost always (at least partially) correct
+        top_left_f, bottom_right_f = get_template_match(img, cutoff_template)
+
+        # It can sometimes happen that the label on the filter is removed
+        # incorrectly in get_removed_label, but those are often not selected
+        # anyway in this procedure, if in the future that changes, see old commits
+        # for a method on how to solve that.
+
+        for cylinder_template_name in cylinder_templates:
+            cylinder_template = Image.open(os.path.join(TEMPLATE_PATH, cylinder_template_name))
+            top_left_c, bottom_right_c = get_template_match(img, cylinder_template)
+
+            x_range = list(range(bottom_right_c[0] - top_left_c[0]))
+            y_range = list(range(bottom_right_c[1] - top_left_c[1]))
+
+            # Checking for an incorrect match
+            cylinder_pixels = check_incorrect_match(x_range, y_range, img, lambda x: x < 60, top_left_c)
+
+            if cylinder_pixels > 200:
+                # If the match is accurate, combine the two rectangles
+                top_left_cc = (min(top_left_f[0], top_left_c[0]), min(top_left_f[1], top_left_c[1]))
+                bottom_right_cc = (max(bottom_right_f[0], bottom_right_c[0]), max(bottom_right_f[1], bottom_right_c[1]))
+
+                # Creating a new image to draw the two rectangles on
+                width = bottom_right_cc[0] - top_left_cc[0]
+                height = bottom_right_cc[1] - top_left_cc[1]
+                combined = Image.new('RGB', (width, height), (0, 0, 0))
+
+                # Filter image crop and paste
+                area_f = img.crop((top_left_f[0], top_left_f[1], bottom_right_f[0], bottom_right_f[1]))
+                combined.paste(area_f, (top_left_f[0] - top_left_cc[0], top_left_f[1] - top_left_cc[1]))
+
+                # Black cylinder image crop and paste
+                area_c = img.crop((top_left_c[0], top_left_c[1], bottom_right_c[0], bottom_right_c[1]))
+                combined.paste(area_c, (top_left_c[0] - top_left_cc[0], top_left_c[1] - top_left_cc[1]))
+
+                # Add in the space between the two template matches, if it is not connected
+                # This is the cylinder template on the right side case
+                if top_left_f[0] != 0 and bottom_right_f[0] != top_left_c[0]:
+                    top_left_i = (bottom_right_f[0], top_left_c[1])
+                    bottom_right_i = (top_left_c[0], bottom_right_c[1])
+                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
+                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
+
+                # Cylinder template on the left side case
+                if bottom_right_f[0] != 0 and top_left_f[0] != bottom_right_c[0]:
+                    top_left_i = (bottom_right_c[0], top_left_c[1])
+                    bottom_right_i = (top_left_f[0], bottom_right_c[1])
+                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
+                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
+
+                # Perform a final check to remove incorrect template matches
+                x_range = list(range(width))
+                y_range = list(range(height))
+                black_pixels = check_incorrect_match(x_range, y_range, combined, lambda x: x < 1)
+                if black_pixels < 1500:
+                    succes_count += 1
+                    name = file + ".bmp"
+                    filter_coordinates[name] = (top_left_f, bottom_right_f)
+                    combined.save(os.path.join(FILTER_SELECTED_PATH, name))
+                    break
+
+    print("Succesful template matches = " + str(succes_count) + "/" + str(len(files)))
+    return filter_coordinates
+
+
+def generate_synthetic_data(filter_coordinates: dict, class_names: list, n_data: int):
+    """Function that takes filter images from FILTER_SELECTED_PATH and takes labels
+    from CLASS_LABELS_PATH and pastes them on the filter images. The resulting image
+    is then painted on a background image.
+    
+    Args:
+        filter_coordinates: Dictionary with confines the labels should be printed in.
+        class_names: List of class names.
+        n_data: Number of data points to generate per class.
+    """
+    # Getting a list of all filter images and subsetting
+    all_filters = os.listdir(FILTER_SELECTED_PATH)
+    subset_filters = np.random.choice(all_filters, size = n_data * len(class_names))
+    backgrounds = os.listdir(BACKGROUNDS_PATH)
+    
+    for i, class_name in enumerate(class_names):
+        class_labels = os.listdir(os.path.join(CLASS_LABELS_PATH, class_name))
+        subset_class_labels = np.random.choice(class_labels, size = n_data)
+        for j, class_label in enumerate(subset_class_labels):
+            # Paste the class label randomly somewhere on the filter
+            # But restricted, such that it does fall in the right area
+            filter_name = subset_filters[i*len(class_names)+j]
+            filter_img = Image.open(os.path.join(FILTER_SELECTED_PATH, filter_name))
+            class_label_img = Image.open(os.path.join(CLASS_LABELS_PATH,
+                                                      class_name, class_label)) 
+
+            # The filter_img should be converted to a version that does not 
+            # contain black pixels by appending the cylinder part
+            filter_mask = find_mask(filter_img, lambda x: x != 0)
+            
+            # Randomly selecting label on filter location
+            w_label, h_label = class_label_img.size
+            top_left, bottom_right = filter_coordinates[filter_name]
+            w_filter = bottom_right[0] - top_left[0]
+            h_filter = bottom_right[1]  - top_left[1] 
+            pix_to_edge = 15
+
+            # Since the half printed label is always on the left, print it on the left
+            if class_name == "fail_label_half_printed":
+                x = filter_img.size[0] - w_filter
+            else:
+                x = random.randint(pix_to_edge, w_filter - w_label - pix_to_edge)
+            y = random.randint(pix_to_edge, h_filter - h_label - pix_to_edge)
+
+            # Applying random rotation and random horizontal flip transformation
+            # Then pasting on the filter
+            transform = T.Compose([T.RandomChoice([T.RandomRotation(degrees = (0, 10)),
+                                                   T.Lambda(lambda x: x)]),
+                                   T.RandomHorizontalFlip(p = 0.25)])
+            class_label_img = transform(class_label_img)
+
+            # Converting the class_label_img to a version that only has
+            # pixels for the label and pasting only that part
+            class_label_mask = find_mask(class_label_img, lambda x: x < 220 and x > 120)
+            filter_img = paste_selected(filter_img, class_label_img, class_label_mask, x, y)
+            
+            # Post processing step of inpainting the edges of the filter
+            if class_name != "fail_label_half_printed":
+                filter_img = paint_rect_edges(filter_img, (x, y),
+                                (x + class_label_img.size[0], y + class_label_img.size[1]),
+                                edge_width = 3, radius = 4)
+            else:
+                filter_img = paint_rect_edges(filter_img, (x, y),
+                                (x + class_label_img.size[0], y + class_label_img.size[1]),
+                                edge_width = 3, radius = 2)
+
+            # Then paste the filter img randomly somewhere on the background
+            # Ensuring that the top 60 pixels and bottom 30 pixels are not
+            # possible, since the edge of the filter system is there
+            background_img = Image.open(os.path.join(BACKGROUNDS_PATH,
+                                                     random.choice(backgrounds)))
+            w_background, h_background = background_img.size
+            # w_filter is the size of the filter, without the cylinder,
+            # but here the cylinder should be added to the width
+            w_filter = filter_img.size[0]
+            h_filter = filter_img.size[1]
+            x = random.randint(0, w_background - w_filter)
+            y = random.randint(60, h_background - h_filter - 30)
+
+            # Pasting filter with label, applying post-processing and saving
+            background_img = paste_selected(background_img, filter_img, filter_mask, x, y)
+            background_img = paint_rect_edges(background_img, (x, y),
+                             (x + filter_img.size[0], y + filter_img.size[1]),
+                             edge_width = 8, radius = 20)
+            background_img.save(os.path.join(SYNTHETIC_EX_PATH, class_name,
+                                             "example_" + str(i*len(class_names) + j) + ".png"))
+
+
+def get_template_match(img: Image.Image, template: Image.Image):
     """This is a function that takes in an image and a template.
     It looks for the closest match of the template in the image.
     The image is normalized such that the template does not have to
@@ -147,7 +317,7 @@ def get_template_match(img, template):
     return top_left, bottom_right
 
 
-def remove_and_fill(img, top_left, bottom_right):
+def remove_and_fill(img: Image.Image, top_left: tuple, bottom_right: tuple):
     """Function that takes a bounding box in an image
     and based on pixel intensity criteria, removes pixels
     thought to be label pixels.
@@ -190,67 +360,8 @@ def remove_and_fill(img, top_left, bottom_right):
     return img_label_removed
 
 
-def get_selected_filter():
-    """This function takes all filters with their labels removed from them
-    applies normalized pattern matching to each filter to see where in the image
-    the filter is located. A subset of those filters is then saved as a filter image
-    in the filters_selected directory, removing the filters that had their label
-    removed in an incorrect manner.
-    """
-    # Paths used in this function
-    filter_template_path = os.path.join(TEMPLATE_PATH, "filter_template.png")
-
-    # Get filter template and list of all filters with labels removed
-    # Get a list of all filters with labels removed
-    filter_template = Image.open(filter_template_path)
-    files = os.listdir(FILTER_REMOVED_PATH)
-    filters_selected = []
-
-    # Setting length and width thresholds for bounding box
-    # The thresholds are there such that only pixels in the middle are
-    # considered for label pixel counting
-    length_threshold = 12
-    width_threshold = 12
-
-    # Select the filter in the image
-    for file in files:
-        img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
-
-        # Matching each file to filter template
-        top_left, bottom_right = get_template_match(img, filter_template)
-
-        # Working with a grey image to check the intensity
-        grey_image = img.convert("L")
-
-        # x and y range of the bounding box
-        x_range = list(range(bottom_right[0] - top_left[0] - 2 * width_threshold))
-        y_range = list(range(bottom_right[1] - top_left[1] - 2 * length_threshold))
-        label_pixels = 0
-
-        # Looping over all pixels, the intensity range of 120-150 was picked
-        # by trial and error. The problem is that pixels on the edges of the filter
-        # have similar intensities to label pixels.
-        for x in x_range:
-            for y in y_range:
-                point_x = top_left[0] + x + width_threshold
-                point_y = top_left[1] + y + length_threshold
-                if grey_image.getpixel((point_x, point_y)) < 150 and \
-                   grey_image.getpixel((point_x, point_y)) > 120:
-                    # The pixel is likely a label print pixel
-                    label_pixels += 1
-        
-        # If there are too many label pixels, the label was probably not removed correctly
-        if label_pixels < 100:
-            # Cropping and saving the resulting bounding box with the label
-            filter_box = img.crop((top_left[0], top_left[1], bottom_right[0], bottom_right[1]))
-            filter_box.save(os.path.join(FILTER_SELECTED_PATH, file))
-            filters_selected.append(file)
-        
-    print("Amount of filters selected out of total: " + 
-          str(len(filters_selected)) + "/" + str(len(files)))
-
-
-def paint_rect_edges(img, top_left, bottom_right, edge_width, radius):
+def paint_rect_edges(img: Image.Image, top_left: tuple, bottom_right: tuple,
+                     edge_width: int, radius: int):
     """This function takes a PIL image, converts to cv2, creates a mask,
     fills the mask with a rectangle based on top_left and bottom_right
     based on an edge_width. CV2's inpainting function is then used to
@@ -291,191 +402,88 @@ def paint_rect_edges(img, top_left, bottom_right, edge_width, radius):
     return img
 
 
-def generate_synthetic_data(class_names: list, n_data: int):
-    # Getting a list of all filter images and subsetting
-    all_filters = os.listdir(FILTER_SELECTED_PATH)
-    subset_filters = np.random.choice(all_filters, size = n_data * len(class_names))
-
-    # Backgrounds
-    backgrounds = os.listdir(BACKGROUNDS_PATH)
+def check_incorrect_match(x_range: list, y_range: list, img: Image.Image,
+                          condition, top_left = [0,0]):
+    """Function that checks a condition for an image to see how many
+    pixels in the image meet that condition.
     
-    for i, class_name in enumerate(class_names):
-        class_labels = os.listdir(os.path.join(CLASS_LABELS_PATH, class_name))
-        subset_class_labels = np.random.choice(class_labels, size = n_data)
-        for j, class_label in enumerate(subset_class_labels):
-            # Paste the class label randomly somewhere on the filter
-            # But restricted, such that it does fall in the right area
-            filter_img = Image.open(os.path.join(FILTER_SELECTED_PATH,
-                                                 subset_filters[i*len(class_names)+j]))
-            class_label_img = Image.open(os.path.join(CLASS_LABELS_PATH,
-                                                      class_name, class_label))
-            
-            # Converting the class_label_img to a version that only has pixels for the label
-            # All other pixels should be transparent/e.g. taken from the filter iself
-            class_label_img = class_label_img.convert("RGBA")
-            class_label_img_grey = class_label_img.convert("L")
-            mask = np.zeros((class_label_img.size[1], class_label_img.size[0]), dtype = np.uint8)
-            for y in range(class_label_img.size[1]):
-                for x in range(class_label_img.size[0]):
-                    if class_label_img_grey.getpixel((x, y)) < 220 and \
-                        class_label_img_grey.getpixel((x, y)) > 120:
-                        mask[y, x] = 255
-            class_label_img.putalpha(Image.fromarray(mask))
-            
-            # Randomly selecting label on filter location
-            w_label, h_label = class_label_img.size
-            w_filter, h_filter = filter_img.size
-            pix_to_edge = 15
-            x = random.randint(pix_to_edge, w_filter - w_label - pix_to_edge)
-            y = random.randint(pix_to_edge, h_filter - h_label - pix_to_edge)
-
-            # Applying random rotation and random horizontal flip transformation
-            # Then pasting on the filter
-            transform = T.Compose([T.RandomChoice([T.RandomRotation(degrees = (0, 10)),
-                                                   T.Lambda(lambda x: x)]),
-                                   T.RandomHorizontalFlip(p = 0.25)])
-            class_label_img = transform(class_label_img)
-            filter_img.paste(class_label_img, (x, y), mask = class_label_img.split()[-1])
-
-            # Post processing step of inpainting the edges of the filter
-            filter_img = paint_rect_edges(filter_img, (x, y),
-                             (x + class_label_img.size[0], y + class_label_img.size[1]),
-                             edge_width = 3, radius = 4)
-
-            # Then paste the filter img randomly somewhere on the background
-            # Ensuring that the top 60 pixels and bottom 30 pixels are not
-            # possible, since the edge of the filter system is there
-            background_img = Image.open(os.path.join(BACKGROUNDS_PATH,
-                                                     random.choice(backgrounds)))
-            w_background, h_background = background_img.size
-            x = random.randint(0, w_background - w_filter)
-            y = random.randint(60, h_background - h_filter - 30)
-
-            # Pasting filter with label, applying post-processing and saving
-            background_img.paste(filter_img, (x, y))
-            background_img = paint_rect_edges(background_img, (x, y),
-                             (x + filter_img.size[0], y + filter_img.size[1]),
-                             edge_width = 8, radius = 20)
-            background_img.save(os.path.join(SYNTHETIC_EX_PATH, class_name,
-                                             "example_" + str(i*len(class_names) + j) + ".png"))
-
-
-def check_incorrect_match(x_range, y_range, image, top_left, threshold):
+    Args:
+        x_range: List of x coordinates to check.
+        y_range: List of y coordinates to check.
+        img: PIL image.
+        condition: Function that takes a pixel value and returns a boolean.
+        top_left: Tuple of (x, y) coordinates of top left corner of bounding box.
+    """
     # Working with a grey image to check the intensity
-    grey_image = image.convert("L")
+    img = img.convert("L")
     pixels = 0
     # Looping over pixels
     for x in x_range:
         for y in y_range:
-            point_x = top_left[0] + x
-            point_y = top_left[1] + y 
-            if grey_image.getpixel((point_x, point_y)) < threshold:
+            if condition(img.getpixel((x + top_left[0], y + top_left[1]))):
                 pixels += 1
     return pixels
 
 
-def test():
-    # THIS FUNCTION REPLACES get_selected_filter()
-    # TODO: In generate_synthetic_data, only print the label in the confines of the coordinates given in
-    # the filter_coordinates dictionary for the file. Also, only print any pixels that are not completely
-    # black (0, 0, 0) - see putalpha in generate_synthetic_data how to do that with opacity.
-    # TODO: Replace incorrect match checks with the check_incorrect_match() function
-    # TODO: After extraction of the image, do a personal check of the extracted images
-    # to see which one were done correctly and which ones were not.
+def paste_selected(background_img: Image.Image, paste_img: Image.Image,
+                   mask_img: Image.Image, x_offset: int, y_offset: int):
+    """Function that takes a background image and an image to paste on it
+    any pixel is painted on the background image, if the mask value is 1.
+    
+    Args:
+        background_img: PIL image.
+        paste_img: PIL image.
+        mask_img: PIL image.
+        x_offset: Offset in x direction.
+        y_offset: Offset in y direction.
+    """
+    for y in range(mask_img.size[1]):
+        for x in range(mask_img.size[0]):
+            if mask_img.getpixel((x, y)) == 1:
+                pixel = paste_img.getpixel((x, y))
+                background_img.putpixel((x + x_offset, y + y_offset), pixel)
+    return background_img
 
-    files = os.listdir(FILTER_REMOVED_PATH)
-    cutoff_template = Image.open(os.path.join(TEMPLATE_PATH, "filter_cutoff_template.png"))
-    succes_count = 0
-    filter_coordinates = {}
 
-    # Create cylinder template list
-    cylinder_templates = ["filter_cylinder_template_r.png", "filter_cylinder_template_l1.png",
-                          "filter_cylinder_template_l2.png"]
-
-    for file in files:
-        img = Image.open(os.path.join(FILTER_REMOVED_PATH, file))
-
-        # The cutoff template is almost always (at least partially) correct
-        top_left_f, bottom_right_f = get_template_match(img, cutoff_template)
-        filter_coordinates[file] = (top_left_f, bottom_right_f)
-
-        # It can sometimes happen that the label on the filter is removed
-        # incorrectly in get_removed_label, but those are often not selected
-        # anyway in this procedure, if in the future that changes, see old commits
-        # for a method on how to solve that.
-
-        for cylinder_template_name in cylinder_templates:
-            cylinder_template = Image.open(os.path.join(TEMPLATE_PATH, cylinder_template_name))
-            top_left_c, bottom_right_c = get_template_match(img, cylinder_template)
-
-            x_range = list(range(bottom_right_c[0] - top_left_c[0]))
-            y_range = list(range(bottom_right_c[1] - top_left_c[1]))
-
-            # Checking for an incorrect match
-            cylinder_pixels = check_incorrect_match(x_range, y_range, img, top_left_c, threshold = 60)
-
-            if cylinder_pixels > 200:
-                # If the match is accurate, combine the two rectangles
-                top_left_cc = (min(top_left_f[0], top_left_c[0]), min(top_left_f[1], top_left_c[1]))
-                bottom_right_cc = (max(bottom_right_f[0], bottom_right_c[0]), max(bottom_right_f[1], bottom_right_c[1]))
-
-                # Creating a new image to draw the two rectangles on
-                width = bottom_right_cc[0] - top_left_cc[0]
-                height = bottom_right_cc[1] - top_left_cc[1]
-                combined = Image.new('RGB', (width, height), (0, 0, 0))
-
-                # Filter image crop and paste
-                area_f = img.crop((top_left_f[0], top_left_f[1], bottom_right_f[0], bottom_right_f[1]))
-                combined.paste(area_f, (top_left_f[0] - top_left_cc[0], top_left_f[1] - top_left_cc[1]))
-
-                # Black cylinder image crop and paste
-                area_c = img.crop((top_left_c[0], top_left_c[1], bottom_right_c[0], bottom_right_c[1]))
-                combined.paste(area_c, (top_left_c[0] - top_left_cc[0], top_left_c[1] - top_left_cc[1]))
-
-                # Add in the space between the two template matches, if it is not connected
-                # This is the cylinder template on the right side case
-                if top_left_f[0] != 0 and bottom_right_f[0] != top_left_c[0]:
-                    top_left_i = (bottom_right_f[0], top_left_c[1])
-                    bottom_right_i = bottom_right_c
-                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
-                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
-
-                # Cylinder template on the left side case
-                if bottom_right_f[0] != 0 and top_left_f[0] != bottom_right_c[0]:
-                    top_left_i = (bottom_right_c[0], top_left_c[1])
-                    bottom_right_i = (top_left_f[0], bottom_right_c[1])
-                    area_i = img.crop((top_left_i[0], top_left_i[1], bottom_right_i[0], bottom_right_i[1]))
-                    combined.paste(area_i, (top_left_i[0] - top_left_cc[0], top_left_i[1] - top_left_cc[1]))
-
-                # Perform a final check to remove incorrect template matches
-                x_range = list(range(width))
-                y_range = list(range(height))
-                black_pixels = check_incorrect_match(x_range, y_range, combined, [0, 0], threshold = 1)
-                if black_pixels < 1500:
-                    succes_count += 1
-                    combined.save(os.path.join("data", "NTZFilterSynthetic", "test", file + "_test" + ".bmp"))
-                    break
-
-    print("Succesful template matches = " + str(succes_count) + "/" + str(len(files)))
-    return filter_coordinates
+def find_mask(img: Image.Image, condition):
+    """Function that takes a PIL image and a condition and returns
+    a mask in which every pixel that meets the condition has a value
+    of 1.
+    
+    Args:
+        img: PIL image.
+        condition: Function that takes a pixel value and returns a boolean.
+    """
+    img = img.convert("L")
+    mask = np.zeros((img.size[1], img.size[0]), dtype = np.uint8)
+    for y in range(img.size[1]):
+        for x in range(img.size[0]):
+            if condition(img.getpixel((x, y))):
+                mask[y, x] = 1
+    mask = Image.fromarray(mask)
+    return mask
         
 
 def setup_data_generation():
-    # Creating synthetic data pipeline:
+    # Creating synthetic data algorithm:
     # Phase 1 - Getting all the data together
     # 1. Detect the class label in the image, save it to appropriate directory in class_labels
     # 2. Remove the class label from the image (save all images to label_removed, no class directories) 
     # 3. Remove (manually?) the images that have wrong label removal
     #     -> Perhaps this can be done procedurally?
-    # 4. Select the filter in the image by using the filter template, save those to filter_selected
-    # 5. Remove (manually?) the images that have wrong background removal
+    # 4. Select the filter in the image by using the filter template
+    # 5. Select the cylinder in the image by using cylinder template
+    # 6. Combine filter and cylinder template.
+    # 7. Remove (manually?) the images that have wrong background removal
     #     -> Again, perhaps this can be done procedurally
     # Phase 2 - Generating synthetic data
-    # 6. Loop through all filters available in filter_selected, paste a class label from class_labels
+    # 8. Loop through all filters available in filter_selected, paste a class label from class_labels
     #    on it, and paste that onto the background.
-    # 7. Post-processing: Cleaning the images pasted on top of each other
+    # 9. Post-processing: Cleaning the images pasted on top of each other
     # Applying inpainting around the rectangle that is pasted on the image
     # (Applied after each pasting step)
+    # 10. Do a quick personal survey of each new data sample and remove
+    # the ones that are not good enough
 
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
@@ -483,19 +491,17 @@ def setup_data_generation():
     data_types = ["train", "val", "test"]
     start_time = time.time()
 
-    # print("Creating Synthetic data directories")
-    # create_synthetic_data_dirs(class_names)
-    # print("Getting class labels and saving filters without labels")
-    # get_removed_label(class_names, data_types) # Steps 1-3
-    # print("Matching filters")
-    # get_selected_filter() # Steps 4-5
-    # print("Generating Synthetic data")
-    # generate_synthetic_data(class_names, 25) # Step 7
-
-    filter_coordinates = test()
+    print("Creating Synthetic data directories")
+    create_synthetic_data_dirs(class_names)
+    print("Getting class labels and saving filters without labels")
+    get_removed_label(class_names, data_types) # Steps 1-3
+    print("Matching filters")
+    filter_coordinates = get_selected_filter() # Steps 4-5
+    print("Generating Synthetic data")
+    generate_synthetic_data(filter_coordinates, class_names, 25) # Step 7
 
     # Recording total time passed
-    # Steps 1-3 take about 9 minutes, the other steps take much less time.
+    # Takes about 18 minutes in total
     elapsed_time = time.time() - start_time
     print("Total data generation time (H/M/S) = ", 
           time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
