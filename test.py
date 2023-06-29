@@ -4,6 +4,7 @@ import os
 import tensorrt as trt
 import time
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 import torchvision
 from tqdm import tqdm
@@ -47,6 +48,34 @@ def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int, im
     # Converting model to tensorRT with the builder, config and the profile
     model = torch2trt(model, [torch.ones(norm_shape).cuda()], fp16_mode = True,
                       max_batch_size = batch_size, builder = builder, config = config)
+    return model
+
+
+def get_inference_speed(model: torchvision.models, device: torch.device, data_loader: DataLoader, n: int):
+    """This function calculates the inference speed of a model by 
+    doing n+1 forwards passes and calculating the time it takes
+    to classify all images in the dataset.
+    
+    Args:
+        model: The model to test on
+        device: The device which data/model is present on.
+        data_loader: The data loader contains the data.
+        n: Amount of runs to do.
+    """
+    fps = []
+    for i in range(n+1):
+        print("Inference run " + str(i))
+        test_start = time.time()
+        total_imgs = 0
+        with torch.no_grad():
+            for inputs, _ in data_loader:
+                inputs = inputs.to(device)
+                model(inputs)
+                total_imgs += len(inputs)
+        # Skip the first run, since its always slow
+        if i != 0:
+            fps.append(round(total_imgs / (time.time() - test_start)))
+    print("Average inference fps = " + str(np.mean(fps)))
     return model
 
 
@@ -109,7 +138,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     return prediction_list, img_paths_list, input_concat
 
 
-def setup_testing(experiment_folder: str, convert_trt: bool = False):
+def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed: bool = False):
     """Function that sets up dataloader, transforms and loads in the model
     for testing. 
 
@@ -192,6 +221,9 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False):
             model = convert_to_trt(model, len(test_loader.dataset), batch_size, img_size)
 
     # Testing the model on testing data
+    if calc_speed:
+        # The amount of runs is high, since the forward passes can be unstable
+        get_inference_speed(model, device, test_loader, 25)
     predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
                                                            img_destination, rbf_flag)
     return model, predicted_labels, img_paths, input_concat
@@ -203,10 +235,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment_folder", type = str)
     parser.add_argument("--convert_trt", action = "store_true")
+    parser.add_argument("--calc_speed", action = "store_true")
     args = parser.parse_args()
     if os.path.exists(os.path.join("Results", "Experiment-Results",
                                     args.experiment_folder)):
         print("Testing on model from experiment: " + args.experiment_folder)
-        setup_testing(args.experiment_folder, args.convert_trt)
+        setup_testing(args.experiment_folder, args.convert_trt, args.calc_speed)
     else:
         print("Experiment not found, exiting ...")

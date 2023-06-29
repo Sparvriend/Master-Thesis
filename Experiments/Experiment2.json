@@ -1,0 +1,4 @@
+{
+    "model": "resnet18(weights = ResNet18_Weights.DEFAULT)",
+    "early_limit": "0"
+}

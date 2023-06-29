@@ -17,3 +17,5 @@ Master-Thesis-Experiments/results.txt
 tiny-imagenet-200/*
 Results
 temp.py
+raw_data/NTZ_filter_label_data
+raw_data/NTZ_filter_synthetic

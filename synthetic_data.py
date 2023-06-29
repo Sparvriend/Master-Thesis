@@ -8,12 +8,12 @@ import torchvision.transforms as T
 
 
 # Path definitions:
-TEMPLATE_PATH = os.path.join("Synthetic-Samples", "templates")
-BACKGROUNDS_PATH = os.path.join("Synthetic-Samples", "background")
-CLASS_LABELS_PATH = os.path.join("data", "NTZFilterSynthetic", "class_labels")
-FILTER_SELECTED_PATH = os.path.join("data", "NTZFilterSynthetic", "filter_selected")
-FILTER_REMOVED_PATH = os.path.join("data", "NTZFilterSynthetic", "label_removed")
-SYNTHETIC_EX_PATH = os.path.join("data", "NTZFilterSynthetic", "synthetic_data_ex")
+TEMPLATE_PATH = os.path.join("raw_data", "synthetic_samples", "templates")
+BACKGROUNDS_PATH = os.path.join("raw_data","synthetic_samples", "background")
+CLASS_LABELS_PATH = os.path.join("raw_data", "NTZ_filter_synthetic", "class_labels")
+FILTER_SELECTED_PATH = os.path.join("raw_data", "NTZ_filter_synthetic", "filter_selected")
+FILTER_REMOVED_PATH = os.path.join("raw_data", "NTZ_filter_synthetic", "label_removed")
+SYNTHETIC_EX_PATH = os.path.join("raw_data", "NTZ_filter_synthetic", "synthetic_data")
 
 
 def create_synthetic_data_dirs(class_names: list):
@@ -24,7 +24,7 @@ def create_synthetic_data_dirs(class_names: list):
         class_names: List of class names.
     """
     # Creating top level directory
-    path = os.path.join("data", "NTZFilterSynthetic")
+    path = os.path.join("raw_data", "NTZ_filter_synthetic")
     if not os.path.exists(path):
         os.mkdir(path)
 
@@ -36,12 +36,10 @@ def create_synthetic_data_dirs(class_names: list):
             os.mkdir(dir)
 
         # Lisiting and creating class directories for class_labels
-        class_labels_path = os.path.join(path, "class_labels")
-        synthetic_data_ex_path = os.path.join(path, "synthetic_data_ex")
         for class_name in class_names:
-            dir_path = os.path.join(class_labels_path, class_name)
+            dir_path = os.path.join(CLASS_LABELS_PATH, class_name)
             os.mkdir(dir_path)
-            dir_path = os.path.join(synthetic_data_ex_path, class_name)
+            dir_path = os.path.join(SYNTHETIC_EX_PATH, class_name)
             os.mkdir(dir_path)
 
             
@@ -464,7 +462,7 @@ def find_mask(img: Image.Image, condition):
     return mask
         
 
-def setup_data_generation():
+def setup_data_generation(n):
     # Creating synthetic data algorithm:
     # Phase 1 - Getting all the data together
     # 1. Detect the class label in the image, save it to appropriate directory in class_labels
@@ -498,14 +496,14 @@ def setup_data_generation():
     print("Matching filters")
     filter_coordinates = get_selected_filter() # Steps 4-5
     print("Generating Synthetic data")
-    generate_synthetic_data(filter_coordinates, class_names, 25) # Step 7
+    generate_synthetic_data(filter_coordinates, class_names, n) # Step 7
 
     # Recording total time passed
-    # Takes about 18 minutes in total
+    # Takes about 19 minutes for 70 samples per class
     elapsed_time = time.time() - start_time
     print("Total data generation time (H/M/S) = ", 
           time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 
 
 if __name__ == '__main__':
-    setup_data_generation()
+    setup_data_generation(25)

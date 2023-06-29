@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 
+
 class ProjDataset(Dataset):
     """ProjDataset class, which serves as a parent to any dataset
     class defined for this project. The child classes inherit the common
@@ -55,13 +56,34 @@ class NTZFilterDataset(ProjDataset):
                           3: "no_fail"}
         self.n_classes = len(self.label_map)	
 
+        # syn_prop indicates the proportion of the data
+        # that should be taken from the NTZSynthetic dataset
+        # 1 - syn_prop is the amount that should be taken from the real NTZ dataset
+        # TODO: This should be changed later, obviously the synthetic data proportion
+        # Should not be set here.
+        self.syn_prop = 1
+        if self.data_type != "train":
+            self.syn_prop = 0
+
         # Setting the paths for each image and a label if it concerns training
         # or validation data, labels are enumerated over
-        for label, dir_name in enumerate(os.listdir(self.data_path)):
-            for file_name in os.listdir(os.path.join(self.data_path, dir_name)):
-                self.img_paths.append(os.path.join(self.data_path, 
-                                                   dir_name, file_name))
-                if self.data_type == "train" or self.data_type == "val":
+        if self.syn_prop != 1:
+            for label, dir_name in enumerate(os.listdir(self.data_path)):
+                files = os.listdir(os.path.join(self.data_path, dir_name))
+                for file_name in files[:int(len(files) * (1 - self.syn_prop))]:
+                    self.img_paths.append(os.path.join(self.data_path, 
+                                                       dir_name, file_name))
+                    if self.data_type == "train" or self.data_type == "val":
+                        self.img_labels.append(label)
+        
+        # Then add synthetic data if self.syn_prop != 0
+        if self.syn_prop != 0:
+            data_path = os.path.join("data", "NTZFilterSynthetic", "train")
+            for label, dir_name in enumerate(os.listdir(data_path)):
+                files = os.listdir(os.path.join(data_path, dir_name))
+                for file_name in files[:int(len(files) * self.syn_prop)]:
+                    self.img_paths.append(os.path.join(data_path, dir_name, 
+                                                       file_name))
                     self.img_labels.append(label)
     
 

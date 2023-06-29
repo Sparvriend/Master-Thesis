@@ -37,7 +37,7 @@
 
 ### Tensorboard tip
 
-To open tensorboard in browser, run the following command in a new terminal: tensorboard --logdir=Master-Thesis-Experiments
+To open tensorboard in browser, run the following command in a new terminal: python3.10 -m tensorboard.main --logdir=Results/Experiment-Results
 
 ### Class definition for the NTZFilterDataset
 

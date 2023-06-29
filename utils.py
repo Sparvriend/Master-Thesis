@@ -96,7 +96,7 @@ def cutoff_date(folder_name: str):
     Args:
         folder_name: Name of the folder.
     """
-    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-17]
+    return os.path.normpath(folder_name).split(os.sep)[-1][:len(folder_name)-20]
 
 
 def add_confusion_matrix(combined_labels: list, combined_labels_pred: list,
@@ -384,7 +384,7 @@ def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWr
     Returns:
         List of tensorboard writers.
     """
-    current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
+    current_time = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
     experiment_path = os.path.join("Results", folder, (experiment_name + "-" + current_time)) 
     train_dir = os.path.join(experiment_path, "train")
     val_dir = os.path.join(experiment_path, "val")
@@ -507,7 +507,7 @@ def calculate_acc_std(experiment_list: list, path: str):
             com_res.write("Mean validation accuracy on final epoch: "
                           + str(np.mean(val_acc_fe)) + "\n")
             com_res.write("Standard deviation of validation accuracy on final epoch: "
-                          + str(np.mean(val_acc_fe)) + "\n")
+                          + str(np.std(val_acc_fe)) + "\n")
             com_res.write("===========================================================\n")  
 
 
@@ -543,13 +543,14 @@ def plot_results(path: str, title: str):
     # Plotting all CSV files, n is the amount of charachters that the date/time
     # entails, plus the underscores and the val flag.
     legend = []
-    n = 20
+    #n = 23 For removing date time at the end of an experiment name
     for i, file in enumerate(csv_files):
         data = pd.read_csv(os.path.join(path, file))
         data.drop("Wall time", axis = 1, inplace = True)
         plt.grid()
         plt.plot(data["Step"], data["Value"], color = color_list[i], linewidth = 1.0)
-        legend.append(os.path.splitext(file)[0][:-n])
+        #legend.append(os.path.splitext(file)[0][:-n])
+        legend.append(os.path.splitext(file)[0])
     plt.legend(legend)
     plt.ylabel("Accuracy") 
     plt.xlabel("Epochs")
@@ -715,7 +716,6 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
     default_transform = get_default_transform(dataset)
 
     # Creating datasets for training/validation/testing
-    # based on NTZFilterDataset class.
     train_data = dataset(train_path, transform)
     val_data = dataset(val_path, default_transform)
     test_data = dataset(test_path, default_transform)
