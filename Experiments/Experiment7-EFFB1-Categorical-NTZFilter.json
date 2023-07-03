@@ -1,4 +1,0 @@
-{
-    "model": "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)", 
-    "augmentation": "categorical"
-}

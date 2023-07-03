@@ -532,7 +532,7 @@ def plot_results(path: str, title: str):
     # Creating colour list based on amount of files
     num_colors = len(csv_files)
     hue_list = [i/num_colors for i in range(num_colors)]
-    random.shuffle(hue_list)
+    #random.shuffle(hue_list)
     color_list = []
 
     # Converting HSV to RGB
@@ -551,6 +551,8 @@ def plot_results(path: str, title: str):
         plt.plot(data["Step"], data["Value"], color = color_list[i], linewidth = 1.0)
         #legend.append(os.path.splitext(file)[0][:-n])
         legend.append(os.path.splitext(file)[0])
+    #plt.ylim(0.2, 1.0)
+    plt.grid(True)
     plt.legend(legend)
     plt.ylabel("Accuracy") 
     plt.xlabel("Epochs")
@@ -577,11 +579,13 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
         ])
     elif dataset.__name__ == "CIFAR10Dataset":
         transform = T.Compose([
+            T.RandomCrop(32, padding = 4),
             T.ToTensor(),
             T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010])
         ])
     elif dataset.__name__ == "TinyImageNet200Dataset":
         transform = T.Compose([
+            T.RandomCrop(64, padding = 4),
             T.ToTensor(),
             T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262])
         ])
@@ -678,8 +682,7 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
                          "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET),
                          "no_augment": T.Lambda(lambda x: x),
                          "random_apply": T.RandomOrder(combined_transforms),
-                         "simple": T.Compose([T.RandomCrop(32, padding=4),
-                                           T.RandomHorizontalFlip()])}
+                         "simple": T.RandomHorizontalFlip()}
 
     # Getting default transform and inserting selected transform type
     transform = get_default_transform(dataset)
@@ -737,4 +740,4 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
 if __name__ == '__main__':
     # train_utils is only used to calculate GFLOPS of a model or to plot results
     # calculate_flops()
-    plot_results(os.path.join("Results", "Experiment-Results", "Experiment reporting"), "Experiments Validation Accuracy")
+    plot_results(os.path.join("Results", "Experiment-Results", "Experiment reporting"), "ResNet18 on tinyImageNet200 Loss")

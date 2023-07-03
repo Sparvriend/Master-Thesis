@@ -11,6 +11,7 @@
       -> Convert Saliency Map to RGB  
       -> Look into using adverserial attacks for explainability   
 * TODO: Add the same random seed to any file that uses a randomized function (including shuffle) -> For Pytorch, Random and Numpy. 
+* TODO: Change how uncertainty is added to images, to make it more presentable when producing images from explainability.py (centercrop removes uncertainty)
 * TODO: Report GPU memory usage/Energy usage (KJ) (NVIDIA management library, code from Ratnajit)  
 * TODO: Replace upsampling with InterpolationMode.BICUBIC (Transforms.resize(256) with method in utils - from Ratnajit)         
 * TODO: Figure out why the testing FPS is so slow (Overhead probably)  

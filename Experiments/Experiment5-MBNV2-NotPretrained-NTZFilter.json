@@ -1,8 +1,0 @@
-{
-    "model": "mobilenet_v2()", 
-    "optimizer": "optim.SGD(hyp_dict[\"model\"].parameters(), lr = 0.025, momentum = 0.9, weight_decay = 0.001)",
-    "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [100,125], gamma = 0.1)",
-    "epochs": "150",
-    "augmentation": "categorical",
-    "early_limit": "0"
-}

@@ -213,19 +213,15 @@ if __name__ == '__main__':
     experiment_path = "Experiments"
     results_path = os.path.join("Results", "Experiment-Results")
     experiment_name = args.experiment_name
-    n_runs = args.n_runs
-
-    # Running all experiments at once is removed, older commits
-    # do still contain the code for it
     
     if experiment_name != None:
         # An experiment was given, check if it exists
         if os.path.exists(os.path.join(experiment_path, experiment_name + ".json")):
             # Then run the experiment n_runs times
             print("Running experiment: " + experiment_name)
-            for _ in range(n_runs):
+            for _ in range(args.n_runs):
                     run_experiment(experiment_name)
-            if n_runs != 1:
+            if args.n_runs != 1:
                 merge_experiments([experiment_name], results_path)
                 calculate_acc_std([experiment_name], results_path) 
         else:

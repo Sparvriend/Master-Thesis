@@ -61,7 +61,7 @@ class NTZFilterDataset(ProjDataset):
         # 1 - syn_prop is the amount that should be taken from the real NTZ dataset
         # TODO: This should be changed later, obviously the synthetic data proportion
         # Should not be set here.
-        self.syn_prop = 1
+        self.syn_prop = 0
         if self.data_type != "train":
             self.syn_prop = 0
 

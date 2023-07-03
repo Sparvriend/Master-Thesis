@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from utils import get_transforms, setup_tensorboard, get_data_loaders, \
                   report_metrics, find_classification_module, setup_hyp_dict, \
-                  setup_hyp_file, get_device
+                  setup_hyp_file, get_device, merge_experiments, calculate_acc_std
 
 
 class RBF_model(nn.Module):
@@ -341,10 +341,20 @@ def train_duq(experiment_name: str):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment_name", type = str)
+    parser.add_argument("--n_runs", type = int, default = 1)
     args = parser.parse_args()
     experiment_name = args.experiment_name
+    results_path = os.path.join("Results", "Experiment-Results")
 
     if experiment_name != None:
         # An experiment was given, check if it exists
-        if os.path.exists(os.path.join("Experiments", experiment_name + ".json")):
-            train_duq(experiment_name)
+        if os.path.exists(os.path.join("Experiments", experiment_name + ".json")):  
+            # Run for multiple times if indicated
+            for _ in range(args.n_runs):
+                    train_duq(experiment_name)
+            # Merge runs if multiple
+            if args.n_runs != 1:
+                merge_experiments([experiment_name], results_path)
+                calculate_acc_std([experiment_name], results_path) 
+        else:
+            print("Experiment does not exist, exiting ...")

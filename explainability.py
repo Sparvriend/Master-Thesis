@@ -32,7 +32,7 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
         img_destination: path to folder to save the images in.
     """
     # Custom transform for only resizing and then cropping to center
-    transform = T.Compose([T.Resize(256, max_size = 320), T.CenterCrop(224)])
+    #transform = T.Compose([T.Resize(256, max_size = 320), T.CenterCrop(224)])
 
     # Setting experiment name
     experiment_name = os.path.normpath(img_destination).split(os.sep)[-1]
@@ -51,7 +51,7 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
         img_name = os.path.normpath(img_paths[i]).split(os.sep)[-1]
         img_path = os.path.join("Results", "Test-Predictions",  experiment_name, img_name) 
         norm_img = Image.open(img_path)
-        norm_img = transform(norm_img)
+        #norm_img = transform(norm_img)
         exp_img = np.transpose(img.squeeze().cpu().detach().numpy(), (1,2,0))
         fig, _ = viz.visualize_image_attr_multiple(exp_img,
                                                    np.asarray(norm_img),
@@ -265,6 +265,8 @@ if __name__ == '__main__':
             captum_explainability(model, img_paths, args.explainability_variant,
                                   device, input_concat, predicted_labels, 
                                   args.experiment)
+        else:
+            print("Experiment results not found, exiting ...")
     elif args.explainability_method == "DEU":
         if os.path.exists(os.path.join("Experiments", args.experiment + ".json")):
             results_path = os.path.join("Results", "Experiment-Results")
