@@ -332,6 +332,8 @@ def save_test_predicts(predicted_labels: list, paths: list,
     # This is the case in DUQ since the labels are calculated manually
     if type(predicted_labels[0]) == torch.Tensor:
         predicted_labels = convert_to_list(predicted_labels)
+    if len(predicted_uncertainty) != 0 and type(predicted_uncertainty[0]) == torch.Tensor:
+        predicted_uncertainty = convert_to_list(predicted_uncertainty)
     paths = flatten_list(paths)
 
     # Getting the dataset label map
@@ -340,11 +342,7 @@ def save_test_predicts(predicted_labels: list, paths: list,
     # Set the text size, based on the average of width/height of the images
     ex_width, ex_height = Image.open(paths[0]).size
     text_size = int(((ex_height + ex_width) / 2)  / 16)
-
-    if isinstance(dataset, NTZFilterDataset):
-        text_loc = (50, 10)
-    else:
-        text_loc = (0, 0)
+    text_loc = get_text_loc(dataset)
 
     # Loading necessary information and then drawing on the label on each image.
     for idx, img_path in enumerate(paths):
@@ -352,28 +350,66 @@ def save_test_predicts(predicted_labels: list, paths: list,
         img = Image.open(img_path)
         label_name = label_dict[predicted_labels[idx]]
 
-        # Drawing the label and saving the image
-        font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
-        draw = ImageDraw.Draw(img)
-        draw.text(text_loc, label_name, font = font, fill = 255)
+        # Drawing label
+        img = draw_label(img, text_loc, text_size, label_name)
 
         # Adding uncertainty in a white block if RBF model
         if len(predicted_uncertainty) != 0:
-            if type(predicted_uncertainty[0]) == torch.Tensor:
-                predicted_uncertainty = convert_to_list(predicted_uncertainty)
-            uncertainty = round(predicted_uncertainty[idx], 2) 
-
-            width, height = img.size
-            bar_height = text_size
-            bar_img = Image.new("RGB", (width, height + bar_height), color = "white")
-            bar_img.paste(img, (0, 0))
-            draw = ImageDraw.Draw(bar_img)
-            draw.text((0, height), "Certainty = " + str(uncertainty), font = font, fill = 255)
-            img = bar_img
+            img = draw_uncertainty_bar(img, predicted_uncertainty[idx], text_size)
 
         img.save(os.path.join(img_destination, name))
 
     return predicted_labels, paths
+
+
+def draw_label(img: Image, text_loc: tuple, text_size: int, label_name: str) -> Image:
+    """Function that draws a label on the top left of an image.
+
+    Args:
+        img: Image to draw the label on.
+        text_loc: Location of the text.
+        text_size: Size of the text to be drawn.
+        label_name: Name of the label to be drawn.
+    """
+    font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
+    draw = ImageDraw.Draw(img)
+    draw.text(text_loc, label_name, font = font, fill = 255)
+    return img
+
+
+def draw_uncertainty_bar(img: Image, uncertainty: float, text_size: int, ) -> Image:
+    """Function that draws a bar with the uncertainty on the bottom of the image.
+    
+    Args:
+        img: Image to draw the bar on.
+        uncertainty: Uncertainty of the prediction.
+        text_size: Size of the text to be drawn.
+
+    Returns: Image with the bar drawn on it.
+    """
+    font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
+    uncertainty = round(uncertainty, 2)
+    width, height = img.size
+    bar_height = text_size
+    bar_img = Image.new("RGB", (width, height + bar_height), color = "white")
+    bar_img.paste(img, (0, 0))
+    draw = ImageDraw.Draw(bar_img)
+    draw.text((0, height), "Certainty = " + str(uncertainty), font = font, fill = 255)
+    return bar_img
+
+
+def get_text_loc(dataset: Dataset):
+    """Function that retrieves the preferred text location for a dataset
+    
+    Args:
+        dataset: The dataset the predictions are made for.
+    """
+    # Add other dataset text locations here if necessary
+    if isinstance(dataset, NTZFilterDataset):
+        text_loc = (10, 10)
+    else:
+        text_loc = (0, 0)
+    return text_loc
 
 
 def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWriter], str]:

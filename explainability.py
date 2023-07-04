@@ -1,5 +1,5 @@
 import argparse
-import captum
+from captum.attr import IntegratedGradients, Saliency, DeepLift, GuidedBackprop
 from captum.attr import visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
@@ -9,6 +9,7 @@ from PIL import Image
 import torch
 import torchvision.models
 import torchvision.transforms as T
+from torch.utils.data import Dataset
 from types import SimpleNamespace
 import warnings
 
@@ -17,11 +18,14 @@ from test import setup_testing, test_model
 from utils import get_transforms, get_data_loaders, setup_tensorboard, \
                   setup_hyp_file, set_classification_layer, \
                   add_confusion_matrix, setup_hyp_dict, merge_experiments, \
-                  save_test_predicts, remove_predicts, get_device
+                  save_test_predicts, remove_predicts, get_device, \
+                  draw_uncertainty_bar, draw_label, get_text_loc, \
+                  convert_to_list
 from train_rbf import RBF_model
 
 
-def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str):
+def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destination: str,
+                             predictions: dict, dataset: Dataset):
     """Function that visualizes an explainability result.
     It combines the original image with image data that explains
     the decision making of the model.
@@ -32,10 +36,7 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
         img_destination: path to folder to save the images in.
     """
     # Custom transform for only resizing and then cropping to center
-    #transform = T.Compose([T.Resize(256, max_size = 320), T.CenterCrop(224)])
-
-    # Setting experiment name
-    experiment_name = os.path.normpath(img_destination).split(os.sep)[-1]
+    transform = T.Compose([T.Resize(256, max_size = 320), T.CenterCrop(224)])
 
     # Creating custom colormaps
     bw_cmap = LinearSegmentedColormap.from_list("custom bw",
@@ -44,14 +45,37 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
                                                  (1, "#000000")],
                                                 N = 256)
     
+    # Converting dict to variables
+    predicted_labels = predictions["label_list"]
+    predicted_uncertainty = predictions["uncertainty_list"]
+
+    if len(predicted_uncertainty) != 0 and type(predicted_uncertainty[0]) == torch.Tensor:
+        predicted_uncertainty = convert_to_list(predicted_uncertainty)
+
+    # Setting label text size and text location
+    ex_width, ex_height = Image.open(img_paths[0]).size
+    text_size = int(((ex_height + ex_width) / 2)  / 16)
+    text_loc = get_text_loc(dataset)
+    
+    # Getting the dataset label map
+    label_dict = dataset.label_map
+    
     # Iterating over all image data and saving 
     # them in combination with the original image
     for i, img in enumerate(img_data):
-        # Retrieving the image, with the label printed on it
-        img_name = os.path.normpath(img_paths[i]).split(os.sep)[-1]
-        img_path = os.path.join("Results", "Test-Predictions",  experiment_name, img_name) 
-        norm_img = Image.open(img_path)
-        #norm_img = transform(norm_img)
+        # Retrieving the image, transform into 224x224 version
+        norm_img = Image.open(img_paths[i])
+        norm_img = transform(norm_img)
+
+        # Print the label onto it
+        label_name = label_dict[predicted_labels[i]]
+        norm_img = draw_label(norm_img, text_loc, text_size, label_name)
+
+        # And add uncertainty if it exists
+        if len(predicted_uncertainty) != 0:
+            norm_img = draw_uncertainty_bar(norm_img, predicted_uncertainty[i], text_size)
+
+        # Draw images along side each other
         exp_img = np.transpose(img.squeeze().cpu().detach().numpy(), (1,2,0))
         fig, _ = viz.visualize_image_attr_multiple(exp_img,
                                                    np.asarray(norm_img),
@@ -65,7 +89,7 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
         plt.close()
 
 
-def captum_explainability(model: torchvision.models, img_paths: list, option: str,
+def captum_explainability(model: torchvision.models, option: str,
                           device: torch.device, input_concat: torch.Tensor,
                           predicted_labels: list, experiment_folder: str):
     """Function that generates function arguments for explainability.
@@ -98,24 +122,20 @@ def captum_explainability(model: torchvision.models, img_paths: list, option: st
             args["internal_batch_size"] = len(predicted_labels)
             args["n_steps"] = 200
             print("Running integrated gradients for model explanation")
-            gen_model_explainability(captum.attr.IntegratedGradients, model,
-                                     img_paths, args, img_desintation)
+            explainability_attr = gen_model_explainability(IntegratedGradients, model, args)
         elif option == "saliency_map":
             print("Running saliency map for model explanation")
-            gen_model_explainability(captum.attr.Saliency, model,
-                                     img_paths, args, img_desintation)
+            explainability_attr = gen_model_explainability(Saliency, model, args)
         elif option == "deeplift":
             print("Running deeplift for model explanation")
-            gen_model_explainability(captum.attr.DeepLift, model,
-                                     img_paths, args, img_desintation)
+            explainability_attr = gen_model_explainability(DeepLift, model, args)
         elif option == "guided_backpropagation":
             print("Running guided backpropagation for model explanation")
-            gen_model_explainability(captum.attr.GuidedBackprop, model,
-                                     img_paths, args, img_desintation)
+            explainability_attr = gen_model_explainability(GuidedBackprop, model, args)
+    return explainability_attr
 
 
-def gen_model_explainability(explain_func, model: torchvision.models,
-                             img_paths: list, args: list, img_desintation: str):
+def gen_model_explainability(explain_func, model: torchvision.models, args: list):
     """Function that generates an explainability object,
     which is basically a significance value per pixel for each image,
     and passes it to the visualization function
@@ -131,7 +151,7 @@ def gen_model_explainability(explain_func, model: torchvision.models,
     explainability_obj = explain_func(model)
     # Unpacking dictionary arguments with **
     explainability_attr = explainability_obj.attribute(**args)
-    visualize_explainability(explainability_attr, img_paths, img_desintation)
+    return explainability_attr
 
 
 def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5):
@@ -252,19 +272,30 @@ if __name__ == '__main__':
     
     if args.explainability_method == "Captum":
         if os.path.exists(os.path.join("Results", "Experiment-Results", args.experiment)):
-            model, predicted_labels, img_paths, input_concat = setup_testing(args.experiment)
+            model, predicted_labels, img_paths, input_concat, predicted_uncertainty, dataset = setup_testing(args.experiment)
             # Cutting off part of the data, since too much causes CUDA memory issues
             max_imgs = 100
             if len(img_paths) > max_imgs:
                 img_paths = img_paths[:max_imgs]
                 input_concat = input_concat[:max_imgs]
                 predicted_labels = predicted_labels[:max_imgs]
+                predicted_uncertainty = predicted_uncertainty[:max_imgs]
+            predictions = {"label_list": predicted_labels, "uncertainty_list": predicted_uncertainty}
             device = get_device()
 
             # Getting explainability results
-            captum_explainability(model, img_paths, args.explainability_variant,
-                                  device, input_concat, predicted_labels, 
-                                  args.experiment)
+            img_data = captum_explainability(model, args.explainability_variant,
+                                             device, input_concat, predicted_labels, 
+                                             args.experiment)
+            
+            # Forming image destination
+            img_destination = os.path.join("Results", "Explainability-Results", args.experiment)
+            if not os.path.exists(img_destination):
+                os.mkdir(img_destination)
+
+            # And visualizing results
+            visualize_explainability(img_data, img_paths, img_destination, predictions, dataset)
+
         else:
             print("Experiment results not found, exiting ...")
     elif args.explainability_method == "DEU":

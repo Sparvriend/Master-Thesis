@@ -59,11 +59,10 @@ class NTZFilterDataset(ProjDataset):
         # syn_prop indicates the proportion of the data
         # that should be taken from the NTZSynthetic dataset
         # 1 - syn_prop is the amount that should be taken from the real NTZ dataset
-        # TODO: This should be changed later, obviously the synthetic data proportion
-        # Should not be set here.
+        # self.data_path is the path to the original NTZ dataset.
+        # data_path is the path to the synthetic dataset
         self.syn_prop = 0
-        if self.data_type != "train":
-            self.syn_prop = 0
+        data_path = os.path.join("data", "NTZFilterSynthetic", self.data_type)
 
         # Setting the paths for each image and a label if it concerns training
         # or validation data, labels are enumerated over
@@ -78,7 +77,6 @@ class NTZFilterDataset(ProjDataset):
         
         # Then add synthetic data if self.syn_prop != 0
         if self.syn_prop != 0:
-            data_path = os.path.join("data", "NTZFilterSynthetic", "train")
             for label, dir_name in enumerate(os.listdir(data_path)):
                 files = os.listdir(os.path.join(data_path, dir_name))
                 for file_name in files[:int(len(files) * self.syn_prop)]:

@@ -135,7 +135,7 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
                                                          img_destination, data_loader.dataset,
                                                          predicted_uncertainty)
 
-    return prediction_list, img_paths_list, input_concat
+    return prediction_list, img_paths_list, input_concat, predicted_uncertainty
 
 
 def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed: bool = False):
@@ -224,9 +224,12 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     if calc_speed:
         # The amount of runs is high, since the forward passes can be unstable
         get_inference_speed(model, device, test_loader, 25)
-    predicted_labels, img_paths, input_concat = test_model(model, device, test_loader,
-                                                           img_destination, rbf_flag)
-    return model, predicted_labels, img_paths, input_concat
+    predicted_labels, img_paths, input_concat, predicted_uncertainty = test_model(model,
+                                                                                  device,
+                                                                                  test_loader,
+                                                                                  img_destination,
+                                                                                  rbf_flag)
+    return model, predicted_labels, img_paths, input_concat, predicted_uncertainty, test_loader.dataset
 
 
 if __name__ == '__main__':
