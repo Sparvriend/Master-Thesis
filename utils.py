@@ -654,22 +654,19 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
     transforms_phase_1 = [T.RandomRotation(degrees = (0, 30)),
                           T.RandomHorizontalFlip(p = 1.0),
                           T.RandomAffine(degrees = 0, translate = (0.1, 0.3),
-                                         scale = (0.75, 1.0), shear = (0, 0.2)),
-                          T.Lambda(lambda x: x)]
+                                         scale = (0.75, 1.0), shear = (0, 0.2))]
     
     # Augmentations phase 2 (Simple color changes)
     transforms_phase_2 = [T.Grayscale(num_output_channels = 3), 
                           T.RandomAdjustSharpness(sharpness_factor = 2, p = 1.0),
-                          T.RandomAutocontrast(p = 1.0), T.RandomEqualize(p = 1.0),
-                          T.Lambda(lambda x: x)]
+                          T.RandomAutocontrast(p = 1.0), T.RandomEqualize(p = 1.0)]
 
     # Augmentations phase 3 (Advanced color changes)
     transforms_phase_3 = [T.RandomInvert(p = 1.0), 
                           T.RandomPosterize(3, p = 1.0),
                           T.RandomSolarize(threshold = random.randint(100, 200), p = 0.5),
                           T.ColorJitter(brightness = (0.3, 1), contrast = (0.3, 1),
-                                        saturation = (0.3, 1), hue = (-0.5, 0.5)),
-                          T.Lambda(lambda x: x)]
+                                        saturation = (0.3, 1), hue = (-0.5, 0.5))]
 
     # Augmentations phase 4 (Adding noise)
     # From the imagecorruption library https://github.com/bethgelab/imagecorruptions
@@ -679,13 +676,18 @@ def get_categorical_transforms() -> tuple[list, T.Compose]:
                           CustomCorruption(corruption_name = "motion_blur"),
                           CustomCorruption(corruption_name = "zoom_blur"),
                           CustomCorruption(corruption_name = "pixelate"),
-                          CustomCorruption(corruption_name = "jpeg_compression"),
-                          T.Lambda(lambda x: x)]
+                          CustomCorruption(corruption_name = "jpeg_compression")]
 
     # Combining categorical transforms into one list
     # and combining into a composed element of random choices
     combined_transforms = transforms_phase_1 + transforms_phase_2 + \
                           transforms_phase_3 + transforms_phase_4
+    
+    # Adding no augment option to phases
+    for phase in [transforms_phase_1, transforms_phase_2, 
+                   transforms_phase_3, transforms_phase_4]:
+        phase = phase.append(T.Lambda(lambda x: x))
+
     categorical_transforms = T.Compose([T.RandomChoice(transforms_phase_1),
                                         T.RandomChoice(transforms_phase_2),
                                         T.RandomChoice(transforms_phase_3),

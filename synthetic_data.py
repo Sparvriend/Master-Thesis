@@ -228,7 +228,7 @@ def generate_synthetic_data(filter_coordinates: dict, class_names: list, n_data:
             class_label_mask = find_mask(class_label_img, lambda x: x < 220 and x > 120)
             filter_img = paste_selected(filter_img, class_label_img, class_label_mask, x, y)
             
-            # Post processing step of inpainting the edges of the filter
+            # Post processing step of inpainting the edges of the class label img
             if class_name != "fail_label_half_printed":
                 filter_img = paint_rect_edges(filter_img, (x, y),
                                 (x + class_label_img.size[0], y + class_label_img.size[1]),
@@ -494,9 +494,9 @@ def setup_data_generation(n):
     print("Getting class labels and saving filters without labels")
     get_removed_label(class_names, data_types) # Steps 1-3
     print("Matching filters")
-    filter_coordinates = get_selected_filter() # Steps 4-5
+    #filter_coordinates = get_selected_filter() # Steps 4-5
     print("Generating Synthetic data")
-    generate_synthetic_data(filter_coordinates, class_names, n) # Step 7
+    #generate_synthetic_data(filter_coordinates, class_names, n) # Step 7
 
     # Recording total time passed
     # Takes about 19 minutes for 70 samples per class
