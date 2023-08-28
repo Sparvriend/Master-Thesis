@@ -56,34 +56,24 @@ class NTZFilterDataset(ProjDataset):
                           3: "no_fail"}
         self.n_classes = len(self.label_map)	
 
-        # syn_prop indicates the proportion of the data
-        # that should be taken from the NTZSynthetic dataset
-        # 1 - syn_prop is the amount that should be taken from the real NTZ dataset
-        # self.data_path is the path to the original NTZ dataset.
-        # data_path is the path to the synthetic dataset
-        self.syn_prop = 0
-        data_path = os.path.join("data", "NTZFilterSynthetic", self.data_type)
-
         # Setting the paths for each image and a label if it concerns training
         # or validation data, labels are enumerated over
-        if self.syn_prop != 1:
-            for label, dir_name in enumerate(os.listdir(self.data_path)):
-                files = os.listdir(os.path.join(self.data_path, dir_name))
-                for file_name in files[:int(len(files) * (1 - self.syn_prop))]:
-                    self.img_paths.append(os.path.join(self.data_path, 
-                                                       dir_name, file_name))
-                    if self.data_type == "train" or self.data_type == "val":
-                        self.img_labels.append(label)
-        
-        # Then add synthetic data if self.syn_prop != 0
-        if self.syn_prop != 0:
-            for label, dir_name in enumerate(os.listdir(data_path)):
-                files = os.listdir(os.path.join(data_path, dir_name))
-                for file_name in files[:int(len(files) * self.syn_prop)]:
-                    self.img_paths.append(os.path.join(data_path, dir_name, 
-                                                       file_name))
+        for label, dir_name in enumerate(os.listdir(self.data_path)):
+            files = os.listdir(os.path.join(self.data_path, dir_name))
+            for file_name in files:
+                self.img_paths.append(os.path.join(self.data_path, 
+                                                   dir_name, file_name))
+                if self.data_type == "train" or self.data_type == "val":
                     self.img_labels.append(label)
-    
+
+
+class NTZFilterSyntheticDataset(NTZFilterDataset):
+    """NTZFilterSyntheticDataset class, to use for any dataset formed out of
+    partial synthetic data. In terms of setup it is exactly the same as the 
+    NTZFilter dataset."""
+    def __init__(self, data_path: str, transform: T.Compose):
+        super().__init__(data_path, transform)
+
 
 class CIFAR10Dataset(ProjDataset):
     """CIFAR10Dataset class, to use for any dataset formed out of CIFAR images.

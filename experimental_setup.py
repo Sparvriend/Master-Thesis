@@ -4,9 +4,6 @@ import os
 import re
 
 # TODO: Remove duplicate code and move to functions
-# TODO: All experiments using the NTZFilter dataset should use 
-# the synthetic dataset originating from experiment 1, so ensure
-# that the right dataset is used.
 # TODO: EXPERIMENT 1 & EXPIMERENT 6
 
 if __name__ == '__main__':
@@ -20,12 +17,16 @@ if __name__ == '__main__':
         # Experiment 1: Synthetic data study on the NTZFilter Dataset.
         # Experiment 1a: Adding synthetic data in different proportions to
         # ResNet18 and MobileNetV2 (or all of them?)
+        # Since the original dataset is about 70 per class, in this case
+        # the synthetic data samples should not exceed 70 per class.
         # Experiment 1b: Classifier performance on only training on synthetic
         # data and validating on a real set, including model feature analysis
         # through integrated gradients.
+        # In this experiment the synthetic set can be larger
         # Experiment 1c: Classifier performance on only training on a real set
         # and validating on a synthetic set, including model feature analysis
         # through integrated gradients.
+        # In this experiment the synthetic set can be larger
 
     if args.experiment == "experiment_2":
         # Experiment 2: Augmentation testing - Compare augmentation techniques

@@ -3,7 +3,7 @@
     "criterion": "nn.CrossEntropyLoss()", 
     "optimizer": "optim.SGD(hyp_dict[\"model\"].parameters(), lr = 0.01, momentum = 0.9, weight_decay = 0.001)",
     "scheduler": "lr_scheduler.MultiStepLR(hyp_dict[\"optimizer\"], milestones = [30,35], gamma = 0.1)",
-    "dataset": "NTZFilterDataset",
+    "dataset": "NTZFilterSyntheticDataset",
     "epochs": "40",
     "batch_size": "32",
     "shuffle": "True",

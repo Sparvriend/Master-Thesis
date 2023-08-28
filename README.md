@@ -6,7 +6,7 @@
 * TODO: Remove all directories, except for raw_data and go through all files to see if it works (for example update create_dirs() function in data_processing.py)
 * TODO: Update README  
 * TODO: Go through repository and cleanup (incl PEP8).
-* TODO: Send an update email to Javier/Ratnajit/Matias about thesis writing planning, when they can expect updates
+* TODO: Remove the test set for any NTZFilterDataset, since it is too valuable not to use.
 
 ## Optional TODOs
 * OPTIONAL: Do a rerun of PEP8 in all files  
