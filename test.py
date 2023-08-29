@@ -11,7 +11,8 @@ from tqdm import tqdm
 
 from utils import get_data_loaders, save_test_predicts, remove_predicts, \
                   cutoff_date, get_device    
-from datasets import NTZFilterDataset, CIFAR10Dataset, TinyImageNet200Dataset
+from datasets import NTZFilterDataset, NTZFilterSyntheticDataset, \
+                     CIFAR10Dataset, TinyImageNet200Dataset
 from train_rbf import RBF_model
 
 TRTFLAG = True

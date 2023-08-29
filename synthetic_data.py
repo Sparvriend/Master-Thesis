@@ -533,6 +533,8 @@ def copy_list_files(samples: list, data_class: str, syn_data_path: str,
             path = os.path.join("data", "NTZFilter", "train")
         elif data_type == "val":
             path = os.path.join("data", "NTZFilter", "val")
+        elif data_type == "test":
+            path = os.path.join("data", "NTZFilter", "test")
 
     for sample in samples:
         source_path = os.path.join(path, data_class, sample)
@@ -546,6 +548,7 @@ def create_synthetic_dataset(train_set, val_set, train_ratio, val_ratio, no_comb
     classes = os.listdir(SYNTHETIC_EX_PATH)
     check_prev_files("train", syn_data_path, classes)
     check_prev_files("val", syn_data_path, classes)
+    check_prev_files("test", syn_data_path, classes)
 
     for data_class in classes:
         # First copying from synthetic data
@@ -555,15 +558,27 @@ def create_synthetic_dataset(train_set, val_set, train_ratio, val_ratio, no_comb
         copy_list_files(train_samples, data_class, syn_data_path, "synthetic", "train")
         copy_list_files(val_samples, data_class, syn_data_path, "synthetic", "val")
 
+        # The test folder is just copied completely from the real dataset
+        test_samples = os.listdir(os.path.join("data", "NTZFilter", "test", data_class))
+        copy_list_files(test_samples, data_class, syn_data_path, "real", "test")
+
     if no_combine == False:
         # Copying from real dataset with combined method
+        # If the set is 0, then the ratio is also 0 and then all data is real
+        # so no subset has to be made
         for data_class in classes:
-            total_samples = int(train_set / train_ratio)
-            real_train_samples_n = total_samples - train_set 
-            train_samples = os.listdir(os.path.join("data", "NTZFilter", "train", data_class))[:real_train_samples_n]
-            total_samples = int(val_set / val_ratio)
-            real_val_samples_n = total_samples - val_set 
-            val_samples = os.listdir(os.path.join("data", "NTZFilter", "val", data_class))[:real_val_samples_n]
+            if train_set == 0:
+                train_samples = os.listdir(os.path.join("data", "NTZFilter", "train", data_class))
+            else:
+                total_samples = int(train_set / train_ratio)
+                real_train_samples_n = total_samples - train_set 
+                train_samples = os.listdir(os.path.join("data", "NTZFilter", "train", data_class))[:real_train_samples_n]
+            if val_set == 0:
+                val_samples = os.listdir(os.path.join("data", "NTZFilter", "val", data_class))
+            else:
+                total_samples = int(val_set / val_ratio)
+                real_val_samples_n = total_samples - val_set 
+                val_samples = os.listdir(os.path.join("data", "NTZFilter", "val", data_class))[:real_val_samples_n]
             copy_list_files(train_samples, data_class, syn_data_path, "real", "train")
             copy_list_files(val_samples, data_class, syn_data_path, "real", "val")
 
@@ -586,10 +601,10 @@ if __name__ == '__main__':
     # if a ratio is 0, then the dataset is only real, but this option is disabled
     # Example input: python3.10 synthetic_data.py 50 18 0.75 0.75
     parser = argparse.ArgumentParser()
-    parser.add_argument("train_set", type = int, default = 0)
-    parser.add_argument("val_set", type = int, default = 0)
-    parser.add_argument("train_ratio", type = float, default = 0)
-    parser.add_argument("val_ratio", type = float, default = 0)
+    parser.add_argument("train_set", type = int)
+    parser.add_argument("train_ratio", type = float)
+    parser.add_argument("val_set", type = int)
+    parser.add_argument("val_ratio", type = float)
     parser.add_argument("--no_combine", action = "store_true")
     args = parser.parse_args()
     n = args.train_set + args.val_set
@@ -599,18 +614,24 @@ if __name__ == '__main__':
         print("Invalid ratio, exiting...")
         exit()
 
+    # Checking if set and ratio confirm
+    if args.no_combine == False:
+        if ((args.train_set == 0) ^ (args.train_ratio == 0)) or ((args.val_set == 0) ^ (args.val_ratio == 0)):
+            print("Invalid set size, ratio combination, exiting...")
+            exit()
+
     # If combining is disabled, the datasets just need to be combined without checking
     # This is the case with all experiment that use synthetic data without 
     # explicitly testing it
     if args.no_combine == False:
-        if args.train_ratio < 1:
+        if args.train_ratio < 1 and args.train_ratio != 0:
             # Real data is used, hence check if the set size is ok
             # Min amount of samples for the train set for all classes is 48
             if (args.train_set / args.train_ratio) * (1 - args.train_ratio) > 48:
                 print("Train set size is too large, exiting...")
                 exit()
 
-        if args.val_ratio < 1:
+        if args.val_ratio < 1 and args.val_ratio != 0:
             # Real data is used, hence check if the set size is ok
             # Min amount of samples for the val set for all classes is 6
             if (args.val_set / args.val_ratio) * (1 - args.val_ratio) > 6:

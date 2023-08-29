@@ -84,54 +84,6 @@ def split_and_move_NTZ():
             destination_path = os.path.join(TEST_DESTINATION, data_class)
             file_path = os.path.join(DATA_LOCATION_NTZ, data_class, test_file)
             shutil.copy(file_path, destination_path)
-
-
-def split_and_move_NTZ_synthetic():
-    # Setting a maximum of samples for each class (70)
-    train_samples = 56
-    val_samples = 7
-
-    # Create a synthetic data directory for the NTZ
-    # dataset with the max amount of samples per class
-    setup_data_generation(train_samples + val_samples)
-
-    path = os.path.join("data", "NTZFilterSynthetic")
-    if not os.path.exists(os.path.join("data", "NTZFilterSynthetic")):
-        os.mkdir(path)
-        os.mkdir(os.path.join(path, "train"))
-        os.mkdir(os.path.join(path, "val"))
-
-    for data_class in DATA_CLASSES:
-        os.mkdir(os.path.join(path, "train", data_class))
-        os.mkdir(os.path.join(path, "val", data_class))
-        class_path = os.path.join(DATA_LOCATION_SYN, data_class)
-        class_files = os.listdir(class_path)
-
-        # Removing old files present in the train folder
-        train_path = os.path.join(os.path.join(path, "train"), data_class)
-        files = os.listdir(train_path)
-        for old_file in files:
-            file_path = os.path.join(train_path, old_file)
-            os.unlink(file_path)
-
-        # Removing old files present in the val folder
-        val_path = os.path.join(os.path.join(path, "val"), data_class)
-        files = os.listdir(val_path)
-        for old_file in files:
-            file_path = os.path.join(val_path, old_file)
-            os.unlink(file_path)
-
-        # Copying training files to new location
-        train_files = class_files[:train_samples]
-        for train_file in train_files:
-            file_path = os.path.join(DATA_LOCATION_SYN, data_class, train_file)
-            shutil.copy(file_path, train_path)
-        
-        # Copying validation files to new location
-        val_files = class_files[train_samples:train_samples + val_samples]
-        for val_file in val_files:
-            file_path = os.path.join(DATA_LOCATION_SYN, data_class, val_file)
-            shutil.copy(file_path, val_path)
         
 
 def split_and_move_CIFAR():
@@ -292,7 +244,6 @@ def subset_imageNet():
 if __name__ == '__main__':
     # Make sure to run create_dirs() before running split_and_move()
     #create_dirs()
-    #split_and_move_NTZ()
-    split_and_move_NTZ_synthetic()
+    split_and_move_NTZ()
     #split_and_move_CIFAR()
     #subset_imageNet()

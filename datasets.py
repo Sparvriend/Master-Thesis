@@ -70,7 +70,7 @@ class NTZFilterDataset(ProjDataset):
 class NTZFilterSyntheticDataset(NTZFilterDataset):
     """NTZFilterSyntheticDataset class, to use for any dataset formed out of
     partial synthetic data. In terms of setup it is exactly the same as the 
-    NTZFilter dataset."""
+    NTZFilterdataset."""
     def __init__(self, data_path: str, transform: T.Compose):
         super().__init__(data_path, transform)
 
