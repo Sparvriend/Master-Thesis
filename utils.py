@@ -496,7 +496,9 @@ def calculate_flops():
                                         input_shape = (batch_size, 3, 224, 224),
                                         print_profile = False, detailed = False,
                                         warm_up = warm_up)
+        print(str(model.__class__.__name__))
         print(f"FLOPS = {flops}\nMACS = {macs}\nparams = {params}")
+        print("\n")
 
 
 def merge_experiments(experiment_list: list, path: str):
@@ -528,6 +530,7 @@ def calculate_acc_std(experiment_list: list, path: str):
     """
     for experiment in experiment_list:
         val_acc_fe = []
+        val_loss_fe = []
         files = os.listdir(os.path.join(path, experiment))
         for file in files:
             res_path = os.path.join(path, experiment, file, "results.txt")
@@ -537,7 +540,9 @@ def calculate_acc_std(experiment_list: list, path: str):
 
             # Extract validation accuracy on final epoch
             # Accuracy = is 11 characters, so those are removed
-            val_acc_fe.append(float(lines[-3].strip()[11:]))
+            # Loss = is 7 characters, so also removed
+            val_acc_fe.append(float(lines[-4].strip()[11:]))
+            val_loss_fe.append(float(lines[-5].strip()[7:]))
         with open(os.path.join(path, experiment, "results.txt"), "a") as com_res:
             com_res.write("Experiment: " + str(experiment) + "\n")
             com_res.write("List: " + str(val_acc_fe) + "\n")
@@ -545,6 +550,10 @@ def calculate_acc_std(experiment_list: list, path: str):
                           + str(np.mean(val_acc_fe)) + "\n")
             com_res.write("Standard deviation of validation accuracy on final epoch: "
                           + str(np.std(val_acc_fe)) + "\n")
+            com_res.write("Mean validation loss on final epoch: "
+                            + str(np.mean(val_loss_fe)) + "\n")
+            com_res.write("Standard deviation of validation loss on final epoch: "
+                            + str(np.std(val_loss_fe)) + "\n")
             com_res.write("===========================================================\n")  
 
 
@@ -779,5 +788,5 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
 
 if __name__ == '__main__':
     # train_utils is only used to calculate GFLOPS of a model or to plot results
-    # calculate_flops()
-    plot_results(os.path.join("Results", "Experiment-Results", "Experiment reporting"), "ResNet18 on tinyImageNet200 Loss")
+    calculate_flops()
+    #plot_results(os.path.join("Results", "Experiment-Results", "Experiment reporting"), "ResNet18 on tinyImageNet200 Loss")

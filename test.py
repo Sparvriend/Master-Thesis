@@ -166,6 +166,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     
     # Getting experiment_name and creating the folder to paste the images in
     experiment_name = cutoff_date(experiment_folder)
+    experiment_name = experiment_name.split("_")[0] + "_" + experiment_name.split("_")[1]
     img_destination = os.path.join("Results", "Test-Predictions", experiment_folder)
 
     # Removing all old predictions that might be present
@@ -202,7 +203,8 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     test_loader = get_data_loaders(batch_size, dataset = dataset)["test"]
 
     # Depending on the dataset, the sizes of images are variable
-    if dataset.__name__ == "NTZFilterDataset":
+    if dataset.__name__ == "NTZFilterDataset" \
+    or dataset.__name__ == "NTZFilterSyntheticDataset":
         img_size = 224
     elif dataset.__name__ == "CIFAR10Dataset":
         img_size = 32

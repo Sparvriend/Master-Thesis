@@ -3,6 +3,8 @@ import json
 import os
 import re
 import time
+import random
+import shutil
 
 EX_PATH = "Experiments"
 
@@ -13,16 +15,15 @@ def experiment_1():
     the training set. Only concerns ResNet18 and MobileNetV2.
     Experiment 1b: Training on only synthetic data, validating on real set.
     Experiment 1c: Training on only real data, validating on synthetic set.
-    Both experiment 1b and 1c include feature analysis with IG.
-    TODO: SHOULD EXPERIMENT 1A BE REMOVED?
-    TODO: What is the optimal NTZFilterSyntheticDataset?
+    #TODO: Use the other two classifiers for 1b/1c as well? 
+    #TODO: Incorporate average loss for synthetic data proportion
     """
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)"]
-    n_runs = 1
 
     # Experiment 1a
     # In experiment 1a, the total size of the dataset is always 48.
+    n_runs = 10
     combs = [[12, 0.25], [24, 0.5], [36, 0.75], [48, 1]]
     for comb in combs:
         train_set = comb[0]
@@ -39,6 +40,7 @@ def experiment_1():
 
     # Experiment 1b/1c
     # In experiment 1b/1c, the size of the dataset can be larger than 48.
+    n_runs = 1
     combs = [[200, 1, 0, 0], [0, 0, 48, 1]]
     for comb in combs:
         train_set = comb[0]
@@ -47,42 +49,69 @@ def experiment_1():
         val_ratio = comb[3]
         for classifier in classifiers:
             # Editing JSON file, creating synthetic data and running experiment
-            ex_name = edit_json("experiment_1", ["model"], [classifier, train_set,
-                                                            train_ratio, val_set,
-                                                            val_ratio])
+            ex_name = edit_json("experiment_1", ["model", "epochs"], [classifier, "40",
+                                                            train_set, train_ratio,
+                                                            val_set, val_ratio])
             os.system("python3.10 synthetic_data.py " + str(train_set)
                                                       + " " + str(train_ratio)
                                                       + " " + str(val_set)
                                                       + " " + str(val_ratio))
             os.system("python3.10 train.py " + ex_name.replace(".json", "")
                       + " --n_runs " + str(n_runs))
-            # Running integrated gradients with the results directory
-            directory = find_directory(ex_name.replace(".json", ""))
-            os.system("python3.10 explainability.py " + directory + " Captum")
             delete_json(ex_name)
+    
+    # Calculating FID score per class
+    # Compare roughly equal amount of samples (~70)
+    # Create a temporary directory that includes synthetic data with ~70 samples
+    classes = os.listdir(os.path.join("data", "NTZFilter", "train"))
+    syn_path = os.path.join("raw_data", "NTZ_filter_synthetic", "synthetic_data")
+    real_path = os.path.join("data", "NTZFilter", "train")
+    os.mkdir(os.path.join(syn_path, "temp"))
+    for c in classes:
+        syn_files = os.listdir(os.path.join(syn_path, c))
+        syn_files = random.sample(syn_files, 70)
 
+        # Copy to temporary directory
+        for file in syn_files:
+            shutil.copy(os.path.join(syn_path, c, file), os.path.join(syn_path, "temp"))
+            
+        # Perform computation
+        print("FID SCORE FOR CLASS " + c)
+        os.system("python3.10 -m pytorch_fid " + os.path.join(syn_path, c) + " " + os.path.join(real_path, c))
+
+        # Remove files
+        syn_files = os.listdir(os.path.join(syn_path, "temp"))
+        for file in syn_files:
+            os.remove(os.path.join(syn_path, "temp", file))
+        
+    # Remove temp directory
+    os.rmdir(os.path.join(syn_path, "temp"))
+            
 
 def experiment_2():
     """Experiment 2: Augmentation testing per classifier
     on the NTZFilterSynthetic dataset.
-    # TODO: Random apply is terribly slow and is not useful anyway, remove???
+    # TODO: Incorporate average loss per augmentation-classifier
+    # combination. Run the experiment 10 times.
     """
-    classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
-                   "resnet18(weights = ResNet18_Weights.DEFAULT)",
-                   "shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
-                   "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)"]
-    augmentations = ["rand_augment", "categorical", "random_choice", 
-                     "auto_augment", "random_apply"]
+    combs = [["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)", "20"],
+                   ["resnet18(weights = ResNet18_Weights.DEFAULT)", "20"],
+                   ["shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)", "40"],
+                   ["efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)", "20"]]
+    augmentations = ["rand_augment", "categorical",
+                    "random_choice", "auto_augment",]
     n_runs = 1
     
     # Create the dataset to run the experiment on
-    os.system("python3.10 synthetic_data.py 200 0 20 0 --no_combine")
+    create_def_combined()
 
-    for classifier in classifiers:
+    for comb in combs:
+        classifier = comb[0]
+        epochs = comb[1]
         for augment in augmentations:
             # Edit the JSON file, call the experiment and delete the JSON
-            ex_name = edit_json("experiment_2", ["model", "augmentation"],
-                                [classifier, augment])
+            ex_name = edit_json("experiment_2", ["model", "augmentation", "epochs"],
+                                                [classifier, augment, epochs])
             os.system("python3.10 train.py " + ex_name.replace(".json", "")
                       + " --n_runs " + str(n_runs))
             delete_json(ex_name)
@@ -90,32 +119,25 @@ def experiment_2():
 
 def experiment_3():
     """Experiment 3: Classifier testing on the NTZFilterSynthetic dataset.
-    Includes the best augmentation techniques from experiment 2.
+    Includes the best augmentation techniques from experiment 2:
+    Rand augment consistently gives the best results for all classifiers.
     Includes a feature analsysis with IG.
     TRT vs. no TRT speeds have to be run manually.
     GFLOPS calculation has to be run manually.
-    # TODO: FILL IN BEST AUGMENTATION PER CLASSIFIER FROM EXPERIMENT 2.
+    Show loss graph as well as accuracy graph.
     """
-    combs = [["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
-              "rand_augment"],
-             ["resnet18(weights = ResNet18_Weights.DEFAULT)",
-              "rand_augment"],
-             ["shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
-              "rand_augment"],
-             ["efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)",
-              "rand_augment"]]
+    classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
+                   "resnet18(weights = ResNet18_Weights.DEFAULT)",
+                   "shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
+                   "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)"]
     n_runs = 1
     
     # Create the dataset to run the experiment on
-    os.system("python3.10 synthetic_data.py 200 0 20 0 --no_combine")
+    create_def_combined()
 
-    for comb in combs:
-        classifier = comb[0]
-        augment = comb[1]
-
+    for classifier in classifiers:
         # Edit the JSON, run the experiment, run IG and delete JSON
-        ex_name = edit_json("experiment_3", ["model", "augmentation"],
-                            [classifier, augment])
+        ex_name = edit_json("experiment_3", ["model"], [classifier])
         ex_name_rm = ex_name.replace(".json", "")
         os.system("python3.10 train.py " + ex_name_rm
                   + " --n_runs " + str(n_runs))
@@ -130,11 +152,26 @@ def experiment_4():
     Experiment 4b: Classifier performance when DUQ converted without GP.
     TODO: IS THIS EXPERIMENT EVEN NECESSARY?
     """
-    combs = [["mobilenet_v2()", ["0.1", "0"]],
-             ["resnet18()", ["0.5", "0"]],
-             ["shufflenet_v2_x1_0()", ["0.1", "0"]],
-             ["efficientnet_b1()", ["0.1", "0"]]]
+    combs = [["mobilenet_v2()", ["0.1", "None"]],
+             ["resnet18()", ["0.5", "None"]],
+             ["shufflenet_v2_x1_0()", ["0.1", "None"]],
+             ["efficientnet_b1()", ["None"]]]
     n_runs = 1
+
+    # 100 epochs for all models (CIFAR10) in experiment 4
+    # MobileNetV2 GP speed: 5 min/epoch
+    # MobileNetV2 NO GP speed: 30 sec/epoch
+
+    # Resnet18 GP speed: 1 min/epoch
+    # Resnet18 NO GP speed: 30 sec/epoch
+
+    # ShuffleNetV2 GP speed: 3 min 20s/epoch
+    # ShuffleNetV2 NO GP speed: 30 sec/epoch
+
+    # EfficientNetB1 GP speed: - min/epoch
+    # EfficientNetB1 NO GP speed: 30 sec/epoch
+
+    # Total time = 11 min 20 sec/epoch * 100 = 18 hours 53 min 33 sec
 
     for comb in combs:
         classifier = comb[0]
@@ -161,7 +198,7 @@ def experiment_5():
     n_runs = 1
 
     # Create the dataset to run the experiment on
-    os.system("python3.10 synthetic_data.py 200 0 20 0 --no_combine")
+    create_def_combined()
     
     for comb in combs:
         classifier = comb[0]
@@ -252,6 +289,12 @@ def find_directory(ex_name):
     return directory
 
 
+def create_def_combined():
+    """Function that defines the default call for making
+    the combined NTZFilterSynthetic dataset."""
+    os.system("python3.10 synthetic_data.py 150 0 20 0 --no_combine")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment", type = str)
@@ -259,12 +302,13 @@ if __name__ == '__main__':
     start = time.time()
 
     if args.experiment == "experiment_1":
-        # Time estimate (no new synthetic data): 13 minutes
+        # Time estimate (no new synthetic data/1 run): 12 minutes
         experiment_1()
     elif args.experiment == "experiment_2":
-        # Time estimate (no new synthetic data): 75 minutes
+        # Time estimate (no new synthetic data/1 run): 60 minutes
         experiment_2()
     elif args.experiment == "experiment_3":
+        # Time estimate (no new synthetic data/1 run): 13 minutes
         experiment_3()
     elif args.experiment == "experiment_4":
         experiment_4()
@@ -274,5 +318,5 @@ if __name__ == '__main__':
         experiment_6()
     
     elapsed_time = time.time() - start
-    print("Total training time for " + args.experiment + " (H/M/S) = ", 
+    print("Total time for " + args.experiment + " (H/M/S) = ", 
           time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
