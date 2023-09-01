@@ -5,6 +5,8 @@ import re
 import time
 import random
 import shutil
+import cv2
+import numpy as np
 
 EX_PATH = "Experiments"
 
@@ -100,7 +102,7 @@ def experiment_2():
                    ["efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)", "20"]]
     augmentations = ["rand_augment", "categorical",
                     "random_choice", "auto_augment",]
-    n_runs = 1
+    n_runs = 10
     
     # Create the dataset to run the experiment on
     create_def_combined()
@@ -122,9 +124,11 @@ def experiment_3():
     Includes the best augmentation techniques from experiment 2:
     Rand augment consistently gives the best results for all classifiers.
     Includes a feature analsysis with IG.
-    TRT vs. no TRT speeds have to be run manually.
+    TRT vs. no TRT speeds have to be run manually.  
     GFLOPS calculation has to be run manually.
     Show loss graph as well as accuracy graph.
+    # TODO: EXPERIMENT 3 USED TEST DATA WITHOUT SYNTHETIC INCLUSION
+    # COMPLETE RERUN!!!
     """
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)",
@@ -144,6 +148,7 @@ def experiment_3():
         directory = find_directory(ex_name_rm)
         os.system("python3.10 explainability.py " + directory + " Captum")
         delete_json(ex_name)
+        exit()
 
 
 def experiment_4():
@@ -151,11 +156,13 @@ def experiment_4():
     Experiment 4a: Classifier performance when DUQ converted with GP.
     Experiment 4b: Classifier performance when DUQ converted without GP.
     TODO: IS THIS EXPERIMENT EVEN NECESSARY?
+    TODO: Rerun ShuffleNetV1 with GP 0.1
     """
-    combs = [["mobilenet_v2()", ["0.1", "None"]],
-             ["resnet18()", ["0.5", "None"]],
-             ["shufflenet_v2_x1_0()", ["0.1", "None"]],
-             ["efficientnet_b1()", ["None"]]]
+    # combs = [["mobilenet_v2()", ["0.1", "None"]],
+    #          ["resnet18()", ["0.5", "None"]],
+    #          ["shufflenet_v2_x1_0()", ["0.1", "None"]],
+    #          ["efficientnet_b1()", ["None"]]]
+    combs = ["shufflenet_v2_x1_0()", ["0.1"]],
     n_runs = 1
 
     # 100 epochs for all models (CIFAR10) in experiment 4
@@ -171,7 +178,10 @@ def experiment_4():
     # EfficientNetB1 GP speed: - min/epoch
     # EfficientNetB1 NO GP speed: 30 sec/epoch
 
-    # Total time = 11 min 20 sec/epoch * 100 = 18 hours 53 min 33 sec
+    # Total time = 11 min 20 sec/epoch * 100 = 18 hours 53 min
+    # Rerun: ShuffleNetV2 0.1
+    # Rerun: EfficientNetB1 None
+    # Total time = 3 min 50s/epoch * 100 = 6 hours 23 min
 
     for comb in combs:
         classifier = comb[0]
@@ -188,9 +198,10 @@ def experiment_5():
     """Experiment 5: DUQ analysis on NTZFilter dataset.
     Includes feature analysis with IG on a DUQ model.
     Model speeds have to be run manually (No TRT).
-    TODO: SHOULD AUGMENTATIONS FROM EXPERIMENT 2 BE USED HERE?
+    Uses rand augment for all classifiers since that is the best one
+    # TODO: EXPERIMENT 5 USED TEST DATA WITHOUT SYNTHETIC INCLUSION
+    # COMPLETE RERUN!!!
     """
-    
     combs = [["mobilenet_v2()", "lr = 0.05"],
              ["resnet18()", "lr = 0.01"],
              ["shufflenet_v2_x1_0()", "lr = 0.05"],
@@ -199,28 +210,93 @@ def experiment_5():
 
     # Create the dataset to run the experiment on
     create_def_combined()
+
+    # 100 epochs for all models (NTZFilterSynthetic) in experiment 5
+    # MobileNetV2 GP speed: 1 min/epoch
+    # Resnet18 GP speed: 10s/epoch
+    # ShuffleNetV2 GP speed: 20s/epoch
+    # EfficientNetB1 GP speed: 1min 20s/epoch
+    # Total time = 2 min 50sec/epoch * 100 = 4 hours 43 min
     
     for comb in combs:
         classifier = comb[0]
         lr = comb[1]
 
         # Editing JSON, running experiment, running IG and deleting JSON.
-        ex_name = edit_json(experiment_5, ["model"], [classifier, lr])
+        ex_name = edit_json("experiment_5", ["model"], [classifier, lr])
         ex_name_rm = ex_name.replace(".json", "")
-        os.system("python3.10 train_rbf.py " + ex_name_rm +
-                  " --n_runs " + str(n_runs))
+        os.system("python3.10 train_rbf.py " + ex_name_rm
+                  + " --n_runs " + str(n_runs))
         directory = find_directory(ex_name_rm)
         os.system("python3.10 explainability.py " + directory + " Captum")
         delete_json(ex_name)
 
 
 def experiment_6():
-    # TODO: Code this experiment 
-    print("Coming soon...")
-    # Experiment 6: (Perhaps omit this as well?) Edge case analysis.
-    # Experiment 6a: Give a DUQ model a sample that is from a completely
-    # different dataset (out of distribution), see what uncertainty is given.
-    # Experiment 6b: Add noise to a testing image, see what uncertainty is given.
+    """Experiment 6: Edge case analysis.
+    Experiment 6a: Given a DUQ model trained on CIFAR10, what
+    uncertainty does it give when tested on the NTZFilterSynthetic dataset?
+    Experiment 6b: Given a DUQ model trained on NTZFiltersynthetic,
+    what uncertainty does it give when tested on the NTZFilterSynthetic
+    dataset when gaussian noise is added to it?
+    TODO: Exp 6A is actually quite hard to implement, since the dataset
+    # has to be the one and then the other in different places and the
+    # code present is not equipped to deal with that.
+    # Skip this experiment or look for a way to do it. 
+    """
+    # Create the dataset to run the experiment on
+    create_def_combined()
+    syn_path = os.path.join("data", "NTZFilterSynthetic") 
+
+    # Experiment 6a - Training on CIFAR10, testing on NTZFilterSynthetic
+    # n_runs = 1
+    # ex_name = edit_json("experiment_4", ["model", "gp_const"],
+    #                     ["resnet18()", "0.5"])
+    # os.rename(os.path.join(EX_PATH, ex_name),
+    #           os.path.join(EX_PATH, ex_name.replace("4", "6a")))
+    # ex_name = ex_name.replace("4", "6a")
+    # ex_name_rm = ex_name.replace(".json", "")
+    
+    # os.system("python3.10 train_rbf.py " + ex_name_rm
+    #           + " --n_runs " + str(n_runs))
+    # # Creating fake CIFAR10 test directory that includes
+    # # NTZFilterSynthetic testing images
+    # cifar_path = os.path.join("data", "CIFAR10", "test")
+    # os.rename(cifar_path, os.path.join("data", "CIFAR10", "test_"))
+    # os.mkdir(cifar_path)
+    # for c in os.listdir(os.path.join(syn_path, "test")):
+    #     for file in os.listdir(c):
+    #         shutil.copyfile(file, cifar_path)
+
+    # directory = find_directory(ex_name_rm)
+    # os.system("python3.10 explainability.py " + directory + " Captum")
+    # delete_json(ex_name)
+    # shutil.rmtree(cifar_path)
+    # os.rename(os.path.join("data", "CIFAR10", "test_"), cifar_path)
+    
+    # Experiment 6b - Training on NTZFilterSynthetic, testing on NTZFilterSynthetic with noise
+    # Train model
+    n_runs = 1
+    ex_name = edit_json("experiment_3", ["model", "RBF_flag"], ["resnet18()", "True"])
+    os.rename(os.path.join(EX_PATH, ex_name),
+              os.path.join(EX_PATH, ex_name.replace("3", "6b")))
+    ex_name = ex_name.replace("3", "6b")
+    ex_name_rm = ex_name.replace(".json", "")
+    os.system("python3.10 train_rbf.py " + ex_name_rm
+              + " --n_runs " + str(n_runs))
+
+    # Create a noise dataset (offline augmentation), overwrites existing test dataset
+    for c in os.listdir(os.path.join(syn_path, "test")):
+        for file in os.listdir(os.path.join(syn_path, "test", c)):
+            img = cv2.imread(os.path.join(syn_path, "test", c, file))
+            gaussian_noise = np.random.normal(0, 25, img.shape).astype(np.uint8)
+            noisy_img = cv2.add(img, gaussian_noise)
+            cv2.imwrite(os.path.join(syn_path, "test", c, file), noisy_img)
+
+    # Test model
+    directory = find_directory(ex_name_rm)
+    os.system("python3.10 explainability.py " + directory + " Captum")
+    delete_json(ex_name)
 
 
 def delete_json(json_name: str):
@@ -247,7 +323,6 @@ def edit_json(json_name, json_args, json_values):
     Returns:
         Name of the experiment results folder.
     """
-
     with open(os.path.join(EX_PATH, json_name + ".json")) as ex_file:
         data = json.load(ex_file)
 
@@ -256,6 +331,7 @@ def edit_json(json_name, json_args, json_values):
     if json_name == "experiment_5":
         optimizer = data["optimizer"]
         data["optimizer"] = optimizer.replace("lr = 0.05", json_values[1])
+        json_values[1] = json_values[1][5:]
 
     ex_name = json_name
     for value in json_values:
@@ -292,7 +368,7 @@ def find_directory(ex_name):
 def create_def_combined():
     """Function that defines the default call for making
     the combined NTZFilterSynthetic dataset."""
-    os.system("python3.10 synthetic_data.py 150 0 20 0 --no_combine")
+    os.system("python3.10 synthetic_data.py 150 0 20 0 20 0 --no_combine")
 
 
 if __name__ == '__main__':
@@ -308,11 +384,13 @@ if __name__ == '__main__':
         # Time estimate (no new synthetic data/1 run): 60 minutes
         experiment_2()
     elif args.experiment == "experiment_3":
-        # Time estimate (no new synthetic data/1 run): 13 minutes
+        # Time estimate (no new synthetic data/1 run): 18 minutes
         experiment_3()
     elif args.experiment == "experiment_4":
+        # Time estimate: 19 hours
         experiment_4()
     elif args.experiment == "experiment_5":
+        # Time estimate: 4 hours
         experiment_5()
     elif args.experiment == "experiment_6":
         experiment_6()

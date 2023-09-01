@@ -167,6 +167,9 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     # Getting experiment_name and creating the folder to paste the images in
     experiment_name = cutoff_date(experiment_folder)
     experiment_name = experiment_name.split("_")[0] + "_" + experiment_name.split("_")[1]
+    for json_file in os.listdir("Experiments"):
+        if json_file.startswith(experiment_name):
+            experiment_name = json_file
     img_destination = os.path.join("Results", "Test-Predictions", experiment_folder)
 
     # Removing all old predictions that might be present
@@ -175,8 +178,6 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     
     # ShuffleNet causes an error with the variable batch size
     # Hence setting it to 1 to fix that
-    # A batch size of 1 would more accurately represent the
-    # Real assembly line at NTZ
     batch_size = 16
     if model.__class__.__name__ == "ShuffleNetV2":
         batch_size = 1
@@ -187,7 +188,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
         def_dict = json.load(f)
 
     # Setting the type of dataset for testing
-    experiment_location = os.path.join("Experiments", experiment_name + ".json")
+    experiment_location = os.path.join("Experiments", experiment_name)
     with open(experiment_location, "r") as f:
         exp_dict = json.load(f)
     
