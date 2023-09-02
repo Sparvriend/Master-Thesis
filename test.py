@@ -181,6 +181,9 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     batch_size = 16
     if model.__class__.__name__ == "ShuffleNetV2":
         batch_size = 1
+    if calc_speed == True:
+        # Batch size of 1 better resembles the pipeline at NTZ
+        batch_size = 1
 
     # Taking default parameters from default experiment
     experiment_location = os.path.join("Experiments", "DEFAULT.json")
@@ -227,7 +230,7 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
     # Testing the model on testing data
     if calc_speed:
         # The amount of runs is high, since the forward passes can be unstable
-        get_inference_speed(model, device, test_loader, 25)
+        get_inference_speed(model, device, test_loader, 100)
     predicted_labels, img_paths, input_concat, predicted_uncertainty = test_model(model,
                                                                                   device,
                                                                                   test_loader,

@@ -17,15 +17,13 @@ def experiment_1():
     the training set. Only concerns ResNet18 and MobileNetV2.
     Experiment 1b: Training on only synthetic data, validating on real set.
     Experiment 1c: Training on only real data, validating on synthetic set.
-    #TODO: Use the other two classifiers for 1b/1c as well? 
-    #TODO: Incorporate average loss for synthetic data proportion
     """
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)"]
 
     # Experiment 1a
     # In experiment 1a, the total size of the dataset is always 48.
-    n_runs = 10
+    n_runs = 1
     combs = [[12, 0.25], [24, 0.5], [36, 0.75], [48, 1]]
     for comb in combs:
         train_set = comb[0]
@@ -35,10 +33,15 @@ def experiment_1():
             ex_name = edit_json("experiment_1", ["model"],
                                 [classifier, train_set, train_ratio])
             os.system("python3.10 synthetic_data.py " + str(train_set)
-                      + " " + str(train_ratio) + " 0 0")
+                      + " " + str(train_ratio) + " 0 0 0 0")
             os.system("python3.10 train.py " + ex_name.replace(".json", "")
                       + " --n_runs " + str(n_runs))
             delete_json(ex_name)
+
+    classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
+                   "resnet18(weights = ResNet18_Weights.DEFAULT)",
+                   "shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
+                   "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)"] 
 
     # Experiment 1b/1c
     # In experiment 1b/1c, the size of the dataset can be larger than 48.
@@ -57,7 +60,8 @@ def experiment_1():
             os.system("python3.10 synthetic_data.py " + str(train_set)
                                                       + " " + str(train_ratio)
                                                       + " " + str(val_set)
-                                                      + " " + str(val_ratio))
+                                                      + " " + str(val_ratio)
+                                                      + " 0 0")
             os.system("python3.10 train.py " + ex_name.replace(".json", "")
                       + " --n_runs " + str(n_runs))
             delete_json(ex_name)
@@ -127,8 +131,6 @@ def experiment_3():
     TRT vs. no TRT speeds have to be run manually.  
     GFLOPS calculation has to be run manually.
     Show loss graph as well as accuracy graph.
-    # TODO: EXPERIMENT 3 USED TEST DATA WITHOUT SYNTHETIC INCLUSION
-    # COMPLETE RERUN!!!
     """
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)",
@@ -148,40 +150,18 @@ def experiment_3():
         directory = find_directory(ex_name_rm)
         os.system("python3.10 explainability.py " + directory + " Captum")
         delete_json(ex_name)
-        exit()
 
 
 def experiment_4():
     """Experiment 4: DUQ analysis on CIFAR10 dataset.
     Experiment 4a: Classifier performance when DUQ converted with GP.
     Experiment 4b: Classifier performance when DUQ converted without GP.
-    TODO: IS THIS EXPERIMENT EVEN NECESSARY?
-    TODO: Rerun ShuffleNetV1 with GP 0.1
     """
-    # combs = [["mobilenet_v2()", ["0.1", "None"]],
-    #          ["resnet18()", ["0.5", "None"]],
-    #          ["shufflenet_v2_x1_0()", ["0.1", "None"]],
-    #          ["efficientnet_b1()", ["None"]]]
-    combs = ["shufflenet_v2_x1_0()", ["0.1"]],
+    combs = [["mobilenet_v2()", ["0.1", "None"]],
+             ["resnet18()", ["0.5", "None"]],
+             ["shufflenet_v2_x1_0()", ["0.1", "None"]],
+             ["efficientnet_b1()", ["None"]]]
     n_runs = 1
-
-    # 100 epochs for all models (CIFAR10) in experiment 4
-    # MobileNetV2 GP speed: 5 min/epoch
-    # MobileNetV2 NO GP speed: 30 sec/epoch
-
-    # Resnet18 GP speed: 1 min/epoch
-    # Resnet18 NO GP speed: 30 sec/epoch
-
-    # ShuffleNetV2 GP speed: 3 min 20s/epoch
-    # ShuffleNetV2 NO GP speed: 30 sec/epoch
-
-    # EfficientNetB1 GP speed: - min/epoch
-    # EfficientNetB1 NO GP speed: 30 sec/epoch
-
-    # Total time = 11 min 20 sec/epoch * 100 = 18 hours 53 min
-    # Rerun: ShuffleNetV2 0.1
-    # Rerun: EfficientNetB1 None
-    # Total time = 3 min 50s/epoch * 100 = 6 hours 23 min
 
     for comb in combs:
         classifier = comb[0]
@@ -199,8 +179,6 @@ def experiment_5():
     Includes feature analysis with IG on a DUQ model.
     Model speeds have to be run manually (No TRT).
     Uses rand augment for all classifiers since that is the best one
-    # TODO: EXPERIMENT 5 USED TEST DATA WITHOUT SYNTHETIC INCLUSION
-    # COMPLETE RERUN!!!
     """
     combs = [["mobilenet_v2()", "lr = 0.05"],
              ["resnet18()", "lr = 0.01"],
@@ -210,13 +188,6 @@ def experiment_5():
 
     # Create the dataset to run the experiment on
     create_def_combined()
-
-    # 100 epochs for all models (NTZFilterSynthetic) in experiment 5
-    # MobileNetV2 GP speed: 1 min/epoch
-    # Resnet18 GP speed: 10s/epoch
-    # ShuffleNetV2 GP speed: 20s/epoch
-    # EfficientNetB1 GP speed: 1min 20s/epoch
-    # Total time = 2 min 50sec/epoch * 100 = 4 hours 43 min
     
     for comb in combs:
         classifier = comb[0]
@@ -378,7 +349,7 @@ if __name__ == '__main__':
     start = time.time()
 
     if args.experiment == "experiment_1":
-        # Time estimate (no new synthetic data/1 run): 12 minutes
+        # Time estimate (no new synthetic data/1 run): 60 minutes
         experiment_1()
     elif args.experiment == "experiment_2":
         # Time estimate (no new synthetic data/1 run): 60 minutes
