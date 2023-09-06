@@ -7,6 +7,11 @@ import random
 import shutil
 import cv2
 import numpy as np
+import tensorflow as tf
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import copy
 
 EX_PATH = "Experiments"
 
@@ -23,11 +28,11 @@ def experiment_1():
 
     # Experiment 1a
     # In experiment 1a, the total size of the dataset is always 48.
-    n_runs = 1
+    n_runs = 10
     combs = [[12, 0.25], [24, 0.5], [36, 0.75], [48, 1]]
     for comb in combs:
         train_set = comb[0]
-        train_ratio = comb[1] 
+        train_ratio = comb[1]
         for classifier in classifiers:
             # Editing JSON file, creating synthetic data and running experiment
             ex_name = edit_json("experiment_1", ["model"],
@@ -45,7 +50,7 @@ def experiment_1():
 
     # Experiment 1b/1c
     # In experiment 1b/1c, the size of the dataset can be larger than 48.
-    n_runs = 1
+    n_runs = 10
     combs = [[200, 1, 0, 0], [0, 0, 48, 1]]
     for comb in combs:
         train_set = comb[0]
@@ -97,8 +102,6 @@ def experiment_1():
 def experiment_2():
     """Experiment 2: Augmentation testing per classifier
     on the NTZFilterSynthetic dataset.
-    # TODO: Incorporate average loss per augmentation-classifier
-    # combination. Run the experiment 10 times.
     """
     combs = [["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)", "20"],
                    ["resnet18(weights = ResNet18_Weights.DEFAULT)", "20"],
@@ -342,6 +345,263 @@ def create_def_combined():
     os.system("python3.10 synthetic_data.py 150 0 20 0 20 0 --no_combine")
 
 
+def graph_experiment_1():
+    check_remove()
+    collected_data = extract_data("multiple")
+
+    # Experiment 1a first
+    sub_list = []
+    substrs = ["12", "24", "36", "48"]
+    for item in ["mobilenet", "resnet18"]:
+        sub_list.append({key: value for key, value in collected_data.items() if item in key and
+                         any(substring in key for substring in substrs)})
+
+    for item in sub_list:
+        copykeys = copy.deepcopy(item)
+        for key, _ in copykeys.items():
+            if "12" in key:
+                item["Synthetic ratio 0.25"] = item.pop(key)
+            elif "24" in key:
+                item["Synthetic ratio 0.50"] = item.pop(key)
+            elif "36" in key:
+                item["Synthetic ratio 0.75"] = item.pop(key)
+            elif "48" in key:
+                item["Synthetic ratio 1"] = item.pop(key)
+    
+    names = ["MobileNetV2", "ResNet18"]
+    for idx, item in enumerate(sub_list):
+        plot_data(item, names[idx] + " Synthetic Ratio ", "", os.path.join("Results", "Experiment-Results"), True)
+
+    # Experiments 1b/1c
+    sub_list = []
+    for item in ["200", "48"]:
+        sub_list.append({key: value for key, value in collected_data.items() if item in key})
+
+    for item in sub_list:
+        item = convert_labels_classifier(item)
+    
+    names = ["Train set", "Validation set"]
+    for idx, item in enumerate(sub_list):
+        plot_data(item, "", " on Synthetic " + names[idx], os.path.join("Results", "Experiment-Results"), True)
+
+def graph_experiment_2():
+    check_remove()
+    collected_data = extract_data("multiple")
+
+    full_list = []
+    for item in ["efficientnet", "mobilenet", "resnet18", "shufflenet"]:
+        full_list.append({key: value for key, value in collected_data.items() if item in key})
+
+    for item in full_list:
+        # Basing it on the copy here, because you can not
+        # edit dict values and then continue the same
+        # iteration process, without issues
+        copykeys = copy.deepcopy(item)
+        for key, _ in copykeys.items():
+            if "auto_augment" in key:
+                item["AutoAugment"] = item.pop(key)
+            elif "categorical" in key:
+                item["Categorical"] = item.pop(key)
+            elif "rand_augment" in key:
+                item["RandAugment"] = item.pop(key)
+            elif "random_choice" in key:
+                item["RandomChoice"] = item.pop(key)
+
+    names = ["EfficientNetB1", "MobileNetV2", "ResNet18", "ShuffleNetV2"]
+    for idx, item in enumerate(full_list):
+        plot_data(item, names[idx] + " Augmentations ", "", os.path.join("Results", "Experiment-Results"), True)
+
+
+def graph_experiment_3():
+    check_remove()
+    collected_data = extract_data("multiple")
+    collected_data = convert_labels_classifier(collected_data)
+    plot_data(collected_data, "Classifier", "", os.path.join("Results", "Experiment-Results"), True)
+
+
+def graph_experiment_4():
+    check_remove()
+    collected_data = extract_data("single")
+
+    full_list = []
+    for item in ["None", "0."]:
+        full_list.append({key: value for key, value in collected_data.items() if item in key})
+
+    for item in full_list:
+        item = convert_labels_classifier(item)
+
+    names = [" without GP", " with GP"]
+    for idx, item in enumerate(full_list):
+        plot_data(item, "DUQ Classifier ", names[idx], os.path.join("Results", "Experiment-Results")) 
+
+
+def graph_experiment_5():
+    check_remove()
+    collected_data = extract_data("multiple")
+    collected_data = convert_labels_classifier(collected_data)
+    plot_data(collected_data, "DUQ Classifier", "", os.path.join("Results", "Experiment-Results"), True)
+
+
+def check_remove():
+    for file in os.listdir(os.path.join("Results", "Experiment-Results")):
+        if file.endswith(".png"):
+            os.remove(os.path.join("Results", "Experiment-Results", file))       
+
+
+def convert_labels_classifier(collected_data):
+    copykeys = copy.deepcopy(collected_data)
+
+    for key, _ in copykeys.items():
+        if "efficientnet" in key:
+            collected_data["EfficientNetB1"] = collected_data.pop(key)
+        elif "mobilenet" in key:
+            collected_data["MobileNetV2"] = collected_data.pop(key)
+        elif "resnet18" in key:
+            collected_data["ResNet18"] = collected_data.pop(key)
+        elif "shufflenet" in key:
+            collected_data["ShuffleNetV2"] = collected_data.pop(key)
+    return collected_data
+
+
+def extract_data(run_type):
+    if run_type == "single":
+    # This is how it works for a single runs
+        event_loc = os.path.join("Results", "Experiment-Results")
+        collected_data = {}
+        for dir in os.listdir(event_loc):
+            data = extract_single_df(os.path.join(event_loc, dir))
+            collected_data[dir] = data
+
+    elif run_type == "multiple":
+        # This is how it work for multiple runs
+        event_loc = os.path.join("Results", "Experiment-Results")
+        collected_data = {}
+        for multi_dir in os.listdir(event_loc):
+            multi_run = []
+
+            for dir in os.listdir(os.path.join(event_loc, multi_dir)):
+                if dir == "results.txt":
+                    continue
+                data = extract_single_df(os.path.join(event_loc, multi_dir, dir))
+                multi_run.append(data)
+            combined_df = pd.concat(multi_run, ignore_index=True)
+            combined_df = merge_dfs(combined_df)
+            collected_data[multi_dir] = combined_df
+    return collected_data
+
+
+def merge_dfs(combined_df):
+    # Group the data by the "Step" column
+    grouped = combined_df.groupby("Step")
+
+    # Calculate the mean and standard deviation for each group (step)
+    mean_df = grouped.mean()
+    std_df = grouped.std()
+
+    # Rename the columns for clarity
+    mean_df.rename(columns = {"Validation Accuracy": "Mean Validation Accuracy",
+                              "Validation Loss": "Mean Validation Loss"},
+                               inplace = True)
+    std_df.rename(columns = {"Validation Accuracy": "Std Validation Accuracy",
+                             "Validation Loss": "Std Validation Loss"},
+                             inplace = True)
+
+    # Merge the mean and standard deviation DataFrames
+    result_df = pd.concat([mean_df, std_df], axis=1)
+
+    # Reset the index if needed
+    result_df.reset_index(inplace=True)
+
+    # Clipping std deviation values, since somehow they can go over 1
+    # when combined with the accuracy
+    error_rows = result_df[result_df["Mean Validation Accuracy"] + result_df["Std Validation Accuracy"] > 1]
+    result_df.loc[error_rows.index, "Std Validation Accuracy"] = 1 - error_rows["Mean Validation Accuracy"]
+    # Not checked, but the same might occur for going lower than 1 for
+    # The loss and the accuracy as well
+    error_rows = result_df[result_df["Mean Validation Accuracy"] - result_df["Std Validation Accuracy"] < 0]
+    result_df.loc[error_rows.index, "Std Validation Accuracy"] = result_df["Mean Validation Accuracy"]
+    # And for the loss
+    error_rows = result_df[result_df["Mean Validation Loss"] - result_df["Std Validation Loss"] < 0]
+    result_df.loc[error_rows.index, "Std Validation Loss"] = result_df["Mean Validation Loss"]
+
+    return result_df
+
+
+def extract_single_df(event_loc):
+    val_event = os.listdir(os.path.join(event_loc, "val"))[0]
+    val_event = os.path.join(event_loc, "val", val_event)
+
+    # Create an EventFileLoader
+    event_file_loader = tf.compat.v1.train.summary_iterator(val_event)
+
+    # Initialize empty lists to store data
+    val_acc = []
+    val_loss = []
+    # Iterate through event files and extract data
+    for event_file in event_file_loader:
+        for event in event_file.summary.value:
+            if event.tag == "Validation Accuracy":
+                val_acc.append(event.simple_value) 
+            if event.tag == "Validation Loss":
+                val_loss.append(event.simple_value)
+
+    # Create a DataFrame from the extracted data
+    step = [i for i in range(len(val_acc))]
+    data = pd.DataFrame({'Step': step, 'Validation Accuracy': val_acc, 'Validation Loss': val_loss})
+    return data
+
+
+def plot_data(collected_data, title1, title2, path, multi = False):
+    # Setting plotstyle and getting df length
+    sns.set(style="darkgrid")
+    iterable = iter(collected_data.items())
+    df_len = next(iterable)[1].shape[0]
+
+    # Validation accuracy plot
+    # First plotting and then configuring pyplot
+    if multi:
+        for key, value in collected_data.items():
+           sns.lineplot(data = value, x = "Step", y = "Mean Validation Accuracy",
+                        label = key)
+           plt.fill_between(value["Step"],
+                            -1 * value["Std Validation Accuracy"] + value["Mean Validation Accuracy"],
+                            value["Std Validation Accuracy"] + value["Mean Validation Accuracy"], alpha = 0.3)
+    else:
+        for key, value in collected_data.items():
+           sns.lineplot(data = value, x = "Step", y = "Validation Accuracy", label = key)
+    title = title1 + "Validation Accuracy" + title2
+    plt.xlim(0, df_len - 1)
+    if df_len == 20:
+        plt.xticks(range(0, df_len - 1, 3))
+    plt.ylim(0, 1.1)
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.title(title)
+    plt.savefig(os.path.join(path, title), dpi = 300)
+    plt.clf()
+
+    # Validation loss plot
+    if multi:
+        for key, value in collected_data.items():
+           sns.lineplot(data = value, x = "Step", y = "Mean Validation Loss",
+                        label = key)
+           plt.fill_between(value["Step"],
+                            -1 * value["Std Validation Loss"] + value["Mean Validation Loss"],
+                            value["Std Validation Loss"] + value["Mean Validation Loss"], alpha = 0.3)
+    else:
+        for key, value in collected_data.items():
+           sns.lineplot(data = value, x = "Step", y = "Validation Loss", label = key)
+    title = title1 + "Validation Loss" + title2
+    plt.xlim(0, df_len - 1)
+    if df_len == 20:
+        plt.xticks(range(0, df_len - 1, 3))
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title(title)
+    plt.savefig(os.path.join(path, title), dpi = 300)
+    plt.clf()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("experiment", type = str)
@@ -351,18 +611,24 @@ if __name__ == '__main__':
     if args.experiment == "experiment_1":
         # Time estimate (no new synthetic data/1 run): 60 minutes
         experiment_1()
+        graph_experiment_1()
     elif args.experiment == "experiment_2":
         # Time estimate (no new synthetic data/1 run): 60 minutes
+        # Time estimate (no new synthetic data/10 runs): 5 hours 18 minutes
         experiment_2()
+        graph_experiment_2()
     elif args.experiment == "experiment_3":
         # Time estimate (no new synthetic data/1 run): 18 minutes
         experiment_3()
+        graph_experiment_3()
     elif args.experiment == "experiment_4":
         # Time estimate: 19 hours
         experiment_4()
+        graph_experiment_4()
     elif args.experiment == "experiment_5":
         # Time estimate: 4 hours
         experiment_5()
+        graph_experiment_5()
     elif args.experiment == "experiment_6":
         experiment_6()
     
