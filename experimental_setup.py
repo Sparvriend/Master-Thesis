@@ -13,6 +13,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import copy
 
+from utils import merge_experiments, calculate_acc_std
+
 EX_PATH = "Experiments"
 
 
@@ -139,7 +141,7 @@ def experiment_3():
                    "resnet18(weights = ResNet18_Weights.DEFAULT)",
                    "shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
                    "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)"]
-    n_runs = 1
+    n_runs = 10
     
     # Create the dataset to run the experiment on
     create_def_combined()
@@ -151,7 +153,17 @@ def experiment_3():
         os.system("python3.10 train.py " + ex_name_rm
                   + " --n_runs " + str(n_runs))
         directory = find_directory(ex_name_rm)
-        os.system("python3.10 explainability.py " + directory + " Captum")
+        if n_runs > 1:
+            sub_dirs = os.listdir(os.path.join("Results", "Experiment-Results", directory))
+            unmerge_experiments(ex_name_rm)
+            for sub_dir in sub_dirs:
+                os.system("python3.10 explainability.py " + sub_dir + " Captum")
+            merge_experiments([ex_name_rm], os.path.join("Results", "Experiment-Results"))
+            merge_experiments([ex_name_rm], os.path.join("Results", "Explainability-Results"))
+            merge_experiments([ex_name_rm], os.path.join("Results", "Test-Predictions"))
+            calculate_acc_std([ex_name_rm], os.path.join("Results", "Experiment-Results"))
+        else:
+            os.system("python3.10 explainability.py " + directory + " Captum")
         delete_json(ex_name)
 
 
@@ -187,7 +199,7 @@ def experiment_5():
              ["resnet18()", "lr = 0.01"],
              ["shufflenet_v2_x1_0()", "lr = 0.05"],
              ["efficientnet_b1()", "lr = 0.01"]]
-    n_runs = 1
+    n_runs = 5
 
     # Create the dataset to run the experiment on
     create_def_combined()
@@ -202,7 +214,17 @@ def experiment_5():
         os.system("python3.10 train_rbf.py " + ex_name_rm
                   + " --n_runs " + str(n_runs))
         directory = find_directory(ex_name_rm)
-        os.system("python3.10 explainability.py " + directory + " Captum")
+        if n_runs > 1:
+            sub_dirs = os.listdir(os.path.join("Results", "Experiment-Results", directory))
+            unmerge_experiments(ex_name_rm)
+            for sub_dir in sub_dirs:
+                os.system("python3.10 explainability.py " + sub_dir + " Captum")
+            merge_experiments([ex_name_rm], os.path.join("Results", "Experiment-Results"))
+            merge_experiments([ex_name_rm], os.path.join("Results", "Explainability-Results"))
+            merge_experiments([ex_name_rm], os.path.join("Results", "Test-Predictions"))
+            calculate_acc_std([ex_name_rm], os.path.join("Results", "Experiment-Results"))
+        else:
+            os.system("python3.10 explainability.py " + directory + " Captum")
         delete_json(ex_name)
 
 
@@ -339,6 +361,19 @@ def find_directory(ex_name):
     return directory
 
 
+def unmerge_experiments(ex_name):
+    # I am retarded, but this seems like the best way of doing this,
+    # instead of changing explainability.py/test.py so late in the
+    # development process.
+
+    for file in os.listdir(os.path.join("Results", "Experiment-Results", ex_name)):
+        source = os.path.join("Results", "Experiment-Results", ex_name, file)
+        destination = os.path.join("Results", "Experiment-Results", file)
+        shutil.move(source, destination)
+    shutil.rmtree(os.path.join("Results", "Experiment-Results", ex_name))
+    os.remove(os.path.join("Results", "Experiment-Results", "results.txt"))
+
+
 def create_def_combined():
     """Function that defines the default call for making
     the combined NTZFilterSynthetic dataset."""
@@ -416,7 +451,7 @@ def graph_experiment_3():
     check_remove()
     collected_data = extract_data("multiple")
     collected_data = convert_labels_classifier(collected_data)
-    plot_data(collected_data, "Classifier", "", os.path.join("Results", "Experiment-Results"), True)
+    plot_data(collected_data, "Classifier ", "", os.path.join("Results", "Experiment-Results"), True)
 
 
 def graph_experiment_4():
@@ -611,7 +646,7 @@ if __name__ == '__main__':
     if args.experiment == "experiment_1":
         # Time estimate (no new synthetic data/1 run): 60 minutes
         experiment_1()
-        graph_experiment_1()
+        #graph_experiment_1()
     elif args.experiment == "experiment_2":
         # Time estimate (no new synthetic data/1 run): 60 minutes
         # Time estimate (no new synthetic data/10 runs): 5 hours 18 minutes
@@ -619,6 +654,7 @@ if __name__ == '__main__':
         graph_experiment_2()
     elif args.experiment == "experiment_3":
         # Time estimate (no new synthetic data/1 run): 18 minutes
+        # Time estimate (no new synthetic data/10 runs): 3 hours
         experiment_3()
         graph_experiment_3()
     elif args.experiment == "experiment_4":
@@ -628,7 +664,7 @@ if __name__ == '__main__':
     elif args.experiment == "experiment_5":
         # Time estimate: 4 hours
         experiment_5()
-        graph_experiment_5()
+        #graph_experiment_5()
     elif args.experiment == "experiment_6":
         experiment_6()
     

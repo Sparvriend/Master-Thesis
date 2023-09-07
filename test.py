@@ -77,6 +77,7 @@ def get_inference_speed(model: torchvision.models, device: torch.device, data_lo
         if i != 0:
             fps.append(round(total_imgs / (time.time() - test_start)))
     print("Average inference fps = " + str(np.mean(fps)))
+    print("Standard deviation = " + str(np.std(fps)))
     return model
 
 

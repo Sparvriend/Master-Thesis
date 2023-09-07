@@ -220,7 +220,7 @@ if __name__ == '__main__':
             # Then run the experiment n_runs times
             print("Running experiment: " + experiment_name)
             for _ in range(args.n_runs):
-                    run_experiment(experiment_name)
+                run_experiment(experiment_name)
             if args.n_runs != 1:
                 merge_experiments([experiment_name], results_path)
                 calculate_acc_std([experiment_name], results_path) 
