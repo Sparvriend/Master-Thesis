@@ -157,13 +157,15 @@ def experiment_3():
             sub_dirs = os.listdir(os.path.join("Results", "Experiment-Results", directory))
             unmerge_experiments(ex_name_rm)
             for sub_dir in sub_dirs:
-                os.system("python3.10 explainability.py " + sub_dir + " Captum")
+                os.system("python3.10 explainability.py " + sub_dir +
+                          " Captum --explainability_variant guided_backpropagation")
             merge_experiments([ex_name_rm], os.path.join("Results", "Experiment-Results"))
             merge_experiments([ex_name_rm], os.path.join("Results", "Explainability-Results"))
             merge_experiments([ex_name_rm], os.path.join("Results", "Test-Predictions"))
             calculate_acc_std([ex_name_rm], os.path.join("Results", "Experiment-Results"))
         else:
-            os.system("python3.10 explainability.py " + directory + " Captum")
+            os.system("python3.10 explainability.py " + directory +
+                      " Captum --explainability_variant guided_backpropagation")
         delete_json(ex_name)
 
 
@@ -199,7 +201,7 @@ def experiment_5():
              ["resnet18()", "lr = 0.01"],
              ["shufflenet_v2_x1_0()", "lr = 0.05"],
              ["efficientnet_b1()", "lr = 0.01"]]
-    n_runs = 5
+    n_runs = 3
 
     # Create the dataset to run the experiment on
     create_def_combined()
@@ -474,7 +476,7 @@ def graph_experiment_5():
     check_remove()
     collected_data = extract_data("multiple")
     collected_data = convert_labels_classifier(collected_data)
-    plot_data(collected_data, "DUQ Classifier", "", os.path.join("Results", "Experiment-Results"), True)
+    plot_data(collected_data, "DUQ Classifier ", "", os.path.join("Results", "Experiment-Results"), True)
 
 
 def check_remove():
@@ -645,8 +647,9 @@ if __name__ == '__main__':
 
     if args.experiment == "experiment_1":
         # Time estimate (no new synthetic data/1 run): 60 minutes
-        experiment_1()
-        #graph_experiment_1()
+        # Time estimate (no new synthetic data/10 runs)): 2 hours 48 minutes
+        #experiment_1()
+        graph_experiment_1()
     elif args.experiment == "experiment_2":
         # Time estimate (no new synthetic data/1 run): 60 minutes
         # Time estimate (no new synthetic data/10 runs): 5 hours 18 minutes
@@ -663,8 +666,9 @@ if __name__ == '__main__':
         graph_experiment_4()
     elif args.experiment == "experiment_5":
         # Time estimate: 4 hours
+        # Time estimate (3 runs): 11 hours 30 minutes
         experiment_5()
-        #graph_experiment_5()
+        graph_experiment_5()
     elif args.experiment == "experiment_6":
         experiment_6()
     
