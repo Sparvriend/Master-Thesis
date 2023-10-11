@@ -13,11 +13,13 @@ TRAIN_DESTINATION = os.path.join("data", "NTZFilter", "train")
 VAL_DESTINATION = os.path.join("data", "NTZFilter", "val")
 TEST_DESTINATION = os.path.join("data", "NTZFilter", "test")
 
+
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION_NTZ = os.path.join("raw_data", "NTZ_filter_label_data")
 DATA_LOCATION_SYN = os.path.join("raw_data", "NTZ_filter_synthetic", "synthetic_data")
 DATA_CLASSES = ["fail_label_crooked_print", "fail_label_half_printed",
                 "fail_label_not_fully_printed", "no_fail"]
+
 
 # Forming train/validation splits
 TRAIN_SPLIT = 0.8
@@ -148,102 +150,8 @@ def create_dirs():
             os.mkdir(path)
 
 
-def extract_file(zip_file, file_info, extract_path):
-    zip_file.extract(file_info, extract_path)
-
-
-def unpack_zip_multithread(zip_name: str, n_threads: int = 16):
-    """Function that unpacks a zip file using multithreading.
-    The zip file is unpacked in the same directory as it is taken from.
-
-    Args:
-        zip_name: Name of the zip file to unpack
-        n_threads: Number of threads to use for unpacking
-    """
-    extract_path = os.path.join(*zip_name.split("/")[:2])
-
-    # Open the zip file
-    with zipfile.ZipFile(zip_name, 'r') as zip_file:
-        # Get the list of files in the zip archive
-        file_list = zip_file.infolist()
-
-        # Create a thread pool for multithreading unpacking
-        with ThreadPoolExecutor(max_workers = n_threads) as executor:    
-            # Send extraction tasks to thread pool
-            futures = [executor.submit(extract_file,
-                                       zip_file,
-                                       file_info,
-                                       extract_path)
-                       for file_info in file_list]
-
-            # Wait for all tasks to complete
-            for future in futures:
-                future.result()
-
-
-def copy_set(origin_path: str, destination_path: str, class_name: str,
-             img_set: list, set_type: str):
-    """Function that copies a set of images from a class to a destination.
-    
-    Args:
-        origin_path: Path to the origin of the images
-        destination_path: Path to the destination of the images
-        class_name: Name of the class to copy images from
-        img_set: List of images to copy
-        set_type: Type of set to copy to (train/val/test)
-    """
-    if set_type == "train" or set_type == "val":
-        set_type = os.path.join(set_type, class_name)
-    for img in img_set:
-        shutil.copy(os.path.join(origin_path, class_name, img), os.path.join(destination_path, set_type, img))
-
-
-def subset_imageNet():
-    """Function that extracts images from ImageNet. n_imgs are extracted
-    of n_classes. The images are added to the dataset called ImageNet10.
-    If the ImageNet dataset is zipped, first extract it with 
-    unpack_zip_multithread()."""
-
-    # Define dataset paths
-    ImageNet_path = "data/ImageNet/ILSVRC/Data/CLS-LOC/train/"
-    ImageNet10_path = "data/ImageNet10"
-    if not os.path.exists(ImageNet10_path):
-        os.mkdir(ImageNet10_path)
-        os.mkdir(os.path.join(ImageNet10_path, "train"))
-        os.mkdir(os.path.join(ImageNet10_path, "val"))
-        os.mkdir(os.path.join(ImageNet10_path, "test"))
-
-    # Set amount of classes to sample from. 
-    # Set the amount of images. The validation set and 
-    # testing set both contain 10% of the size of the training set.
-    n_classes = 10
-    n_imgs = 500
-
-    # Get a subset of ImageNet classes
-    imageNet_classes = os.listdir(ImageNet_path)
-    subset_classes = random.sample(imageNet_classes, n_classes)
-
-    # Loop over subset classes to randomly sample from them
-    for class_name in tqdm(subset_classes):
-        class_imgs = os.listdir(os.path.join(ImageNet_path, class_name))
-        subset_class_imgs = random.sample(class_imgs, n_imgs + int(n_imgs * 0.2))
-        train_set = subset_class_imgs[:n_imgs]
-        val_set = subset_class_imgs[n_imgs:n_imgs + int(n_imgs * 0.1)]
-        test_set = subset_class_imgs[n_imgs + int(n_imgs * 0.1):]
-
-        # Copy each set to designated directory
-        if not os.path.exists(os.path.join(ImageNet10_path, "train", class_name)):
-            os.mkdir(os.path.join(ImageNet10_path, "train", class_name))
-        if not os.path.exists(os.path.join(ImageNet10_path, "val", class_name)):
-            os.mkdir(os.path.join(ImageNet10_path, "val", class_name))
-        copy_set(ImageNet_path, ImageNet10_path, class_name, train_set, "train")
-        copy_set(ImageNet_path, ImageNet10_path, class_name, val_set, "val")
-        copy_set(ImageNet_path, ImageNet10_path, class_name, test_set, "test")
-
-
 if __name__ == '__main__':
     # Make sure to run create_dirs() before running split_and_move()
-    #create_dirs()
+    create_dirs()
     split_and_move_NTZ()
-    #split_and_move_CIFAR()
-    #subset_imageNet()
+    split_and_move_CIFAR()

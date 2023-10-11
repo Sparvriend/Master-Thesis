@@ -230,73 +230,6 @@ def experiment_5():
         delete_json(ex_name)
 
 
-def experiment_6():
-    """Experiment 6: Edge case analysis.
-    Experiment 6a: Given a DUQ model trained on CIFAR10, what
-    uncertainty does it give when tested on the NTZFilterSynthetic dataset?
-    Experiment 6b: Given a DUQ model trained on NTZFiltersynthetic,
-    what uncertainty does it give when tested on the NTZFilterSynthetic
-    dataset when gaussian noise is added to it?
-    TODO: Exp 6A is actually quite hard to implement, since the dataset
-    # has to be the one and then the other in different places and the
-    # code present is not equipped to deal with that.
-    # Skip this experiment or look for a way to do it. 
-    """
-    # Create the dataset to run the experiment on
-    create_def_combined()
-    syn_path = os.path.join("data", "NTZFilterSynthetic") 
-
-    # Experiment 6a - Training on CIFAR10, testing on NTZFilterSynthetic
-    # n_runs = 1
-    # ex_name = edit_json("experiment_4", ["model", "gp_const"],
-    #                     ["resnet18()", "0.5"])
-    # os.rename(os.path.join(EX_PATH, ex_name),
-    #           os.path.join(EX_PATH, ex_name.replace("4", "6a")))
-    # ex_name = ex_name.replace("4", "6a")
-    # ex_name_rm = ex_name.replace(".json", "")
-    
-    # os.system("python3.10 train_rbf.py " + ex_name_rm
-    #           + " --n_runs " + str(n_runs))
-    # # Creating fake CIFAR10 test directory that includes
-    # # NTZFilterSynthetic testing images
-    # cifar_path = os.path.join("data", "CIFAR10", "test")
-    # os.rename(cifar_path, os.path.join("data", "CIFAR10", "test_"))
-    # os.mkdir(cifar_path)
-    # for c in os.listdir(os.path.join(syn_path, "test")):
-    #     for file in os.listdir(c):
-    #         shutil.copyfile(file, cifar_path)
-
-    # directory = find_directory(ex_name_rm)
-    # os.system("python3.10 explainability.py " + directory + " Captum")
-    # delete_json(ex_name)
-    # shutil.rmtree(cifar_path)
-    # os.rename(os.path.join("data", "CIFAR10", "test_"), cifar_path)
-    
-    # Experiment 6b - Training on NTZFilterSynthetic, testing on NTZFilterSynthetic with noise
-    # Train model
-    n_runs = 1
-    ex_name = edit_json("experiment_3", ["model", "RBF_flag"], ["resnet18()", "True"])
-    os.rename(os.path.join(EX_PATH, ex_name),
-              os.path.join(EX_PATH, ex_name.replace("3", "6b")))
-    ex_name = ex_name.replace("3", "6b")
-    ex_name_rm = ex_name.replace(".json", "")
-    os.system("python3.10 train_rbf.py " + ex_name_rm
-              + " --n_runs " + str(n_runs))
-
-    # Create a noise dataset (offline augmentation), overwrites existing test dataset
-    for c in os.listdir(os.path.join(syn_path, "test")):
-        for file in os.listdir(os.path.join(syn_path, "test", c)):
-            img = cv2.imread(os.path.join(syn_path, "test", c, file))
-            gaussian_noise = np.random.normal(0, 25, img.shape).astype(np.uint8)
-            noisy_img = cv2.add(img, gaussian_noise)
-            cv2.imwrite(os.path.join(syn_path, "test", c, file), noisy_img)
-
-    # Test model
-    directory = find_directory(ex_name_rm)
-    os.system("python3.10 explainability.py " + directory + " Captum")
-    delete_json(ex_name)
-
-
 def delete_json(json_name: str):
     """Function that deletes a JSON file.
 
@@ -353,7 +286,6 @@ def find_directory(ex_name):
         Name of the experiments results folder, but including
         the timestamp.
     """
-
     # Since the folder is saved with a timestamp, to run IG
     # it has to be selected first
     all_directories = os.listdir(os.path.join("Results", "Experiment-Results"))
@@ -420,6 +352,7 @@ def graph_experiment_1():
     names = ["Train set", "Validation set"]
     for idx, item in enumerate(sub_list):
         plot_data(item, "", " on Synthetic " + names[idx], os.path.join("Results", "Experiment-Results"), True)
+
 
 def graph_experiment_2():
     check_remove()
@@ -648,7 +581,7 @@ if __name__ == '__main__':
     if args.experiment == "experiment_1":
         # Time estimate (no new synthetic data/1 run): 60 minutes
         # Time estimate (no new synthetic data/10 runs)): 2 hours 48 minutes
-        #experiment_1()
+        experiment_1()
         graph_experiment_1()
     elif args.experiment == "experiment_2":
         # Time estimate (no new synthetic data/1 run): 60 minutes
@@ -669,8 +602,6 @@ if __name__ == '__main__':
         # Time estimate (3 runs): 11 hours 30 minutes
         experiment_5()
         graph_experiment_5()
-    elif args.experiment == "experiment_6":
-        experiment_6()
     
     elapsed_time = time.time() - start
     print("Total time for " + args.experiment + " (H/M/S) = ", 

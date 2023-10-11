@@ -6,8 +6,6 @@
     "dataset": "NTZFilterSyntheticDataset",
     "epochs": "100",
     "batch_size": "16",
-    "shuffle": "True",
-    "num_workers": "4",
     "augmentation": "rand_augment",
     "PFM_flag": "{\"Terminal\": False, \"Tensorboard\": True}",
     "RBF_flag": "True",

@@ -76,6 +76,8 @@ def visualize_explainability(img_data: torch.Tensor, img_paths: list, img_destin
             norm_img = draw_uncertainty_bar(norm_img, predicted_uncertainty[i], text_size)
 
         # Draw images along side each other
+        # plt.cm.inferno for the cmap looks a lot better, but it looks worse in the report,
+        # hence not using it.
         exp_img = np.transpose(img.squeeze().cpu().detach().numpy(), (1,2,0))
         fig, _ = viz.visualize_image_attr_multiple(exp_img,
                                                    np.asarray(norm_img),
@@ -165,8 +167,7 @@ def deep_ensemble_uncertainty(experiment_name, results_path, ensemble_n: int = 5
     # Defining the train transforms
     transform = get_transforms(args.dataset, args.augmentation)
     # Retrieving data loaders
-    data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
-                                    transform, args.dataset)
+    data_loaders = get_data_loaders(args.batch_size, transform, args.dataset)
 
     print("Starting training phase")
     for n in range(ensemble_n):

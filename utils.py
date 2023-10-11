@@ -25,11 +25,13 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from datasets import NTZFilterDataset, NTZFilterSyntheticDataset, \
-                     CIFAR10Dataset, TinyImageNet200Dataset, \
-                     ImageNet10Dataset
+                     CIFAR10Dataset
 from deepspeed.profiling.flops_profiler import get_model_profile
 from imagecorruptions import corrupt
 import warnings
+
+from thop import profile
+from fvcore.nn import FlopCountAnalysis
 
 
 class CustomCorruption:
@@ -293,6 +295,7 @@ def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
 
     return images, path
 
+
 def remove_predicts(path):
     """Function that removes all old predictions from a
     test prediction folder given in the path.
@@ -482,7 +485,8 @@ def setup_hyp_dict(experiment_name: str) -> dict:
 def calculate_flops():
     """ This function uses the DeepSpeed Python library to calculate the FLOPS,
     MACS and the parameters of a model. Keep in mind that the amount of FLOPS
-    linearly increases with the batch size.
+    linearly increases with the batch size. The FLOPS reported are the
+    floating point operations, so not per second (which is different).
     """
     models = [mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT),
               shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT),
@@ -581,18 +585,6 @@ def get_default_transform(dataset: Dataset = NTZFilterDataset) -> T.Compose:
             T.ToTensor(),
             T.Normalize(mean = [0.4914, 0.4822, 0.4465], std = [0.2023, 0.1994, 0.2010])
         ])
-    elif dataset.__name__ == "TinyImageNet200Dataset":
-        transform = T.Compose([
-            T.RandomCrop(64, padding = 4),
-            T.ToTensor(),
-            T.Normalize(mean = [0.4802, 0.4481, 0.3975], std = [0.2302, 0.2265, 0.2262])
-        ])
-    elif dataset.__name__ == "ImageNet10Dataset":
-        transform = T.Compose([
-            T.Resize((256, 256)),
-            T.ToTensor(),
-            T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
-        ]) 
     return transform
 
 
@@ -670,8 +662,7 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
         transform_type: The type of transform to be used. Options are
                         "random_choice", "categorical", "auto_augment" and
                         "rand_augment".
-        dataset: Type of dataset. Options are "NTZFilterDataset", "CIFAR10",
-                 and TinyImageNet200.        
+        dataset: Type of dataset. Options are "NTZFilterDataset" and "CIFAR10".       
     Returns:
         Composed element of transforms.
     """
@@ -691,22 +682,24 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
     return transform
 
 
-def get_data_loaders(batch_size: int = 32, shuffle: bool = True, 
-                     num_workers: int = 4, transform: T.Compose = get_transforms(),
+def get_data_loaders(batch_size: int = 32, transform: T.Compose = get_transforms(),
                      dataset: Dataset = NTZFilterDataset):
     """Function that creates the data loaders for the training, validation
     and testing. The train set is also augmented, while the validation and
     testing sets are not.
 
     Args:
-        transform: Transform to be applied to the data.
         batch_size: Batch size for the data loaders.
-        shuffle: Boolean that determines if the data should be shuffled.
-        num_workers: Number of workers for the data loaders.
+        transform: Transform to be applied to the data.
+        dataset: Dataset for which the data should be loaded.
 
     Returns:
         Dictionary with the data loaders for training, validation and testing.
     """
+    # Setting shuffle and num_workers, it is the same across the entire project.
+    shuffle = True
+    num_workers = 4
+
     # Setting the dataset type
     dataset_path = os.path.join("data", dataset.__name__.removesuffix("Dataset"))
 
@@ -738,5 +731,5 @@ def get_data_loaders(batch_size: int = 32, shuffle: bool = True,
     return data_loaders
 
 if __name__ == '__main__':
-    # train_utils is only used to calculate GFLOPS of a model or to plot results
+    # utils is only used to calculate flops and model parameters
     calculate_flops()

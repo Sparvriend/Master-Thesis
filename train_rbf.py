@@ -223,8 +223,7 @@ def train_duq(experiment_name: str):
     # Defining the train transforms
     transform = get_transforms(args.dataset, args.augmentation)
     # Retrieving data loaders
-    data_loaders = get_data_loaders(args.batch_size, args.shuffle, args.num_workers,
-                                    transform, args.dataset)
+    data_loaders = get_data_loaders(args.batch_size, transform, args.dataset)
 
     # Setting up tensorboard writers and writing hyperparameters
     tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")

@@ -29,7 +29,7 @@ class ProjDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[str, torch.Tensor, int]:
         path = self.img_paths[idx]
         raw_image = Image.open(path)
-        # Converting to RGB if image is grayscale, tinyImageNet has grayscale images
+        # Converting to RGB if image is grayscale
         if raw_image.mode == "L":
             raw_image = raw_image.convert("RGB")
 
@@ -110,81 +110,4 @@ class CIFAR10Dataset(ProjDataset):
         
         # Swapping the label map, since it needs to be saved in the opposite way
         # Not {"frog": 0}, but {0: "frog"} for usage in the code.
-        self.label_map = {v: k for k, v in self.label_map.items()}
-
-
-class TinyImageNet200Dataset(ProjDataset):
-    """TinyImageNetDataset class, to use for any dataset formed
-    out of TinyImageNet images (64x64). Dataset taken from 
-    https://www.kaggle.com/datasets/akash2sharma/tiny-imagenet
-    The name has been adapted to TinyImageNet200"""
-    def __init__(self, data_path: str, transform: T.Compose):
-        super().__init__(data_path, transform)
-
-        # Setting proportion of images to use from entire dataset
-        self.prop = 1
-
-        # Reading labels if training or validation data
-        classes = os.listdir(os.path.join("data", "TinyImageNet200", "train"))
-        self.label_map = {label: i for i, label in enumerate(classes)}
-        self.n_classes = len(self.label_map)
-
-        # Saving data paths and labels for a train dataset
-        if self.data_type == "train":
-            for c in classes:
-                # Randomly selecting a subset of the data
-                images = os.listdir(os.path.join(self.data_path, c, "images"))
-                images = random.sample(images, int(len(images) * self.prop))	
-                for image in images:
-                    # Getting label from label map and saving data path
-                    self.img_paths.append(os.path.join(self.data_path, c, "images", image))
-                    self.img_labels.append(self.label_map[c])
-        else:
-            # Randomly selecting a subset of the data for val/test dataset
-            images = os.listdir(os.path.join(self.data_path, "images"))
-            images = random.sample(images, int(len(images) * self.prop))
-
-        # Saving data paths and labels for a validation dataset
-        if self.data_type == "val":
-            # Loading label file as a pandas dataframe
-            columns = ["filename", "class", "x1", "y1", "x2", "y2"]
-            label_file = os.path.join(self.data_path, "val_annotations.txt")
-            label_df = pd.read_csv(label_file, sep = "\t", header = None, names = columns)
-            for image in images:
-                # Getting label from label df and then label map and saving data path
-                self.img_paths.append(os.path.join(self.data_path, "images", image))
-                label = label_df.loc[label_df["filename"] == image, "class"].values[0]
-                self.img_labels.append(self.label_map[label])
-        
-        # Saving data paths for a test dataset
-        if self.data_type == "test":
-            # Saving image path
-            for image in images:
-                self.img_paths.append(os.path.join(self.data_path, "images", image))
-
-        # Swapping the label map
-        self.label_map = {v: k for k, v in self.label_map.items()}
-
-
-class ImageNet10Dataset(ProjDataset):
-    def __init__(self, data_path: str, transform: T.Compose):
-        super().__init__(data_path, transform)
-        classes = os.listdir(os.path.join("data", "ImageNet10", "train"))
-        self.label_map = {label: i for i, label in enumerate(classes)}
-        self.n_classes = len(self.label_map)
-
-        # For training images add both the label and the image
-        if self.data_type == "train" or self.data_type == "val":
-            for label, dir_name in enumerate(os.listdir(self.data_path)):
-                for file_name in os.listdir(os.path.join(self.data_path, dir_name)):
-                    self.img_paths.append(os.path.join(self.data_path, 
-                                                   dir_name, file_name))
-                    self.img_labels.append(label)
-        # For testing images add only the image
-        else:
-            files = os.listdir(self.data_path)
-            for file in files:
-                self.img_paths.append(os.path.join(self.data_path, file))
-
-        # Swapping the label map
         self.label_map = {v: k for k, v in self.label_map.items()}

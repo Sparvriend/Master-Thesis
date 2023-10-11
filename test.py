@@ -12,7 +12,7 @@ from tqdm import tqdm
 from utils import get_data_loaders, save_test_predicts, remove_predicts, \
                   cutoff_date, get_device    
 from datasets import NTZFilterDataset, NTZFilterSyntheticDataset, \
-                     CIFAR10Dataset, TinyImageNet200Dataset
+                     CIFAR10Dataset
 from train_rbf import RBF_model
 
 TRTFLAG = True
@@ -213,10 +213,6 @@ def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed:
         img_size = 224
     elif dataset.__name__ == "CIFAR10Dataset":
         img_size = 32
-    elif dataset.__name__ == "TinyImageNet200Dataset":
-        img_size = 64
-    elif dataset.__name__ == "ImageNet10Dataset":
-        img_size = 256
 
     # Optionally, port the model to TRT version
     # PyTorch model -> ONNX model -> TensorRT model (Optimized model for GPU)
