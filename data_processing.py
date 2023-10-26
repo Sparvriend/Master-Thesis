@@ -1,12 +1,8 @@
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import os
 import random
-from tqdm import tqdm
 import shutil
-import zipfile
 
-from synthetic_data import setup_data_generation 
 
 # Forming file paths for destinations of training, testing and validation data
 TRAIN_DESTINATION = os.path.join("data", "NTZFilter", "train")
@@ -16,7 +12,6 @@ TEST_DESTINATION = os.path.join("data", "NTZFilter", "test")
 
 # Forming file paths for source of data, as well as the different classes
 DATA_LOCATION_NTZ = os.path.join("raw_data", "NTZ_filter_label_data")
-DATA_LOCATION_SYN = os.path.join("raw_data", "NTZ_filter_synthetic", "synthetic_data")
 DATA_CLASSES = ["fail_label_crooked_print", "fail_label_half_printed",
                 "fail_label_not_fully_printed", "no_fail"]
 
@@ -27,16 +22,11 @@ VAL_SPLIT = 0.1
 
 
 def split_and_move_NTZ():
-    """Function that takes images from NTZ_filter_label_data and splits them
-    into training, testing and validation data. In this function it is assumed
-    that the directories to paste the images in already exist in data/*/*.
+    """Function that takes images from raw_data/NTZ_filter_label_data
+    and splits them into training, testing and validation data.
+    In this function it is assumed that the directories to paste the
+    images in already exist in data/NTZFilter.
     """
-    # 80/10/10 split for training/validation/testing data,
-    # test split is 1 - train_split - val_split
-
-    # Setting a maximum of samples for each class (70)
-    max_samples = 70
-
     for data_class in DATA_CLASSES:
         # Combining path and listing all files in the path
         path = os.path.join(DATA_LOCATION_NTZ, data_class)
@@ -48,13 +38,8 @@ def split_and_move_NTZ():
             if img_file.endswith("bmp"):
                 cleaned_files.append(img_file)
         
-        # Shuffling the images [WHEN REDOING THE MOVE, ENSURE THE MODEL IS
-        # NEVER TRAINED ON VALIDATION/TESTING DATA FROM PREVIOUS SPLIT]
+        # Shuffling the images
         random.shuffle(cleaned_files)
-
-        # Selecting only max_samples per class
-        if len(cleaned_files) > max_samples:
-            cleaned_files = cleaned_files[:max_samples]
 
         # Splitting data into train, test and validation
         train_prop = int(len(cleaned_files) * TRAIN_SPLIT)
@@ -130,8 +115,8 @@ def split_and_move_CIFAR():
 
 
 def create_dirs():
-    """Function that creates all directories required for running modules
-    of the project. It is assumed that the folder NTZ_filter_label_data
+    """Function that creates some directories needed for data management
+    in the project. It is assumed that the folder raw_data/NTZ_filter_label_data
     is already available and is ordered correctly. 
     """
     # Creating some directories for setting up the NTZFilter dataset.
@@ -144,6 +129,7 @@ def create_dirs():
     
     # Creating all directories needed in Results/
     dirs = ["Experiment-Results", "Explainability-Results", "Test-Predictions"]
+    os.mkdir("Results")
     for dir in dirs:
         path = os.path.join("Results", dir)
         if not os.path.exists(path):
@@ -151,7 +137,13 @@ def create_dirs():
 
 
 if __name__ == '__main__':
-    # Make sure to run create_dirs() before running split_and_move()
+    """This file sets up data processing for the NTZ filter dataset and the 
+    CIFAR10 dataset. To make it work it is assumed that there exists a 
+    directory called raw_data, which includes a folder called
+    NTZ_filter_label_data which includes subfolders for each of the classes
+    (DATA_CLASSES) with .bmp files. For the CIFAR10 dataset, the zip
+    download has to be extracted into data/CIFAR10.
+    """
     create_dirs()
     split_and_move_NTZ()
     split_and_move_CIFAR()

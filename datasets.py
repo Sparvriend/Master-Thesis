@@ -1,10 +1,11 @@
 import os
 import pandas as pd
-from PIL import Image
 import random
 import torch
-from torch.utils.data import Dataset
 import torchvision.transforms as T
+
+from PIL import Image
+from torch.utils.data import Dataset
 
 
 class ProjDataset(Dataset):
@@ -77,13 +78,14 @@ class NTZFilterSyntheticDataset(NTZFilterDataset):
 
 class CIFAR10Dataset(ProjDataset):
     """CIFAR10Dataset class, to use for any dataset formed out of CIFAR images.
-    Dataset taken from https://www.kaggle.com/competitions/cifar-10/data?select=train.7z
+    Dataset taken from:
+    https://www.kaggle.com/competitions/cifar-10/data?select=train.7z
     With minimal adjustements, located in data_processing.py"""
     def __init__(self, data_path: str, transform: T.Compose):
         super().__init__(data_path, transform)
 
-        # Setting the proportion of the dataset to use, since 40k
-        # train and 10k validation is way too much
+        # Setting the proportion of the dataset to use
+        # Test set is never used so this reduces time
         if self.data_type == "train" or self.data_type == "val":
             self.prop = 1
         elif self.data_type == "test":

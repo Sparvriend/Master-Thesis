@@ -2,11 +2,12 @@ import argparse
 import cv2
 import numpy as np
 import os
-from PIL import Image
 import random
+import shutil
 import time
 import torchvision.transforms as T
-import shutil
+
+from PIL import Image
 
 
 # Path definitions:
@@ -89,12 +90,16 @@ def get_removed_label(class_names: list, data_types: list):
                         img.save(img_destination)
 
 
-def get_selected_filter():
+def get_selected_filter() -> dict:
     """This function takes all filters with their labels removed from them
     applies normalized pattern matching to each filter to see where in the image
     the filter is located. A subset of those filters is then saved as a filter image
     in the filters_selected directory. Cylinder and filter templates are split up
     and cylinder templates are matched multiple times to get the best result.
+
+    Returns:
+        A dictionary with the filter name as key and the top left and bottom right
+        coordinates of the filter as value.
     """
     files = os.listdir(FILTER_REMOVED_PATH)
     cutoff_template = Image.open(os.path.join(TEMPLATE_PATH, "filter_cutoff_template.png"))
@@ -262,7 +267,7 @@ def generate_synthetic_data(filter_coordinates: dict, class_names: list, n_data:
                                              "example_" + str(i*len(class_names) + j) + "_" + class_name + ".png"))
 
 
-def get_template_match(img: Image.Image, template: Image.Image):
+def get_template_match(img: Image.Image, template: Image.Image) -> tuple[tuple, tuple]:
     """This is a function that takes in an image and a template.
     It looks for the closest match of the template in the image.
     The image is normalized such that the template does not have to
@@ -313,11 +318,10 @@ def get_template_match(img: Image.Image, template: Image.Image):
     x, y = np.unravel_index(np.argmax(match), match_shape)
     top_left = (y, x)
     bottom_right = (y + h, x + w)
-
     return top_left, bottom_right
 
 
-def remove_and_fill(img: Image.Image, top_left: tuple, bottom_right: tuple):
+def remove_and_fill(img: Image.Image, top_left: tuple, bottom_right: tuple) -> Image.Image:
     """Function that takes a bounding box in an image
     and based on pixel intensity criteria, removes pixels
     thought to be label pixels.
@@ -361,7 +365,7 @@ def remove_and_fill(img: Image.Image, top_left: tuple, bottom_right: tuple):
 
 
 def paint_rect_edges(img: Image.Image, top_left: tuple, bottom_right: tuple,
-                     edge_width: int, radius: int):
+                     edge_width: int, radius: int) -> Image.Image:
     """This function takes a PIL image, converts to cv2, creates a mask,
     fills the mask with a rectangle based on top_left and bottom_right
     based on an edge_width. CV2's inpainting function is then used to
@@ -373,6 +377,8 @@ def paint_rect_edges(img: Image.Image, top_left: tuple, bottom_right: tuple,
         bottom_right: Tuple of (x, y) coordinates of bottom right corner of bounding box.
         edge_width: Width of the edges of the rectangle to be filled.
         radius: Radius of the inpainting function.
+    Returns:
+        A PIL image with the edges of the rectangle filled.
     """
     # Converting to CV2, create mask and do inpainting
     img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -403,7 +409,7 @@ def paint_rect_edges(img: Image.Image, top_left: tuple, bottom_right: tuple,
 
 
 def check_incorrect_match(x_range: list, y_range: list, img: Image.Image,
-                          condition, top_left = [0,0]):
+                          condition, top_left = [0,0]) -> int:
     """Function that checks a condition for an image to see how many
     pixels in the image meet that condition.
     
@@ -413,6 +419,8 @@ def check_incorrect_match(x_range: list, y_range: list, img: Image.Image,
         img: PIL image.
         condition: Function that takes a pixel value and returns a boolean.
         top_left: Tuple of (x, y) coordinates of top left corner of bounding box.
+    Returns:
+        Number of pixels that meet the condition.
     """
     # Working with a grey image to check the intensity
     img = img.convert("L")
@@ -426,7 +434,7 @@ def check_incorrect_match(x_range: list, y_range: list, img: Image.Image,
 
 
 def paste_selected(background_img: Image.Image, paste_img: Image.Image,
-                   mask_img: Image.Image, x_offset: int, y_offset: int):
+                   mask_img: Image.Image, x_offset: int, y_offset: int) -> Image.Image:
     """Function that takes a background image and an image to paste on it
     any pixel is painted on the background image, if the mask value is 1.
     
@@ -436,6 +444,8 @@ def paste_selected(background_img: Image.Image, paste_img: Image.Image,
         mask_img: PIL image.
         x_offset: Offset in x direction.
         y_offset: Offset in y direction.
+    Returns:
+        A PIL image with the paste_img pasted on it.
     """
     for y in range(mask_img.size[1]):
         for x in range(mask_img.size[0]):
@@ -445,7 +455,7 @@ def paste_selected(background_img: Image.Image, paste_img: Image.Image,
     return background_img
 
 
-def find_mask(img: Image.Image, condition):
+def find_mask(img: Image.Image, condition) -> Image.Image:
     """Function that takes a PIL image and a condition and returns
     a mask in which every pixel that meets the condition has a value
     of 1.
@@ -453,6 +463,8 @@ def find_mask(img: Image.Image, condition):
     Args:
         img: PIL image.
         condition: Function that takes a pixel value and returns a boolean.
+    Returns:
+        A PIL image with the mask.
     """
     img = img.convert("L")
     mask = np.zeros((img.size[1], img.size[0]), dtype = np.uint8)
@@ -465,51 +477,45 @@ def find_mask(img: Image.Image, condition):
         
 
 def setup_data_generation(n):
-    # Creating synthetic data algorithm:
-    # Phase 1 - Getting all the data together
-    # 1. Detect the class label in the image, save it to appropriate directory in class_labels
-    # 2. Remove the class label from the image (save all images to label_removed, no class directories) 
-    # 3. Remove (manually?) the images that have wrong label removal
-    #     -> Perhaps this can be done procedurally?
-    # 4. Select the filter in the image by using the filter template
-    # 5. Select the cylinder in the image by using cylinder template
-    # 6. Combine filter and cylinder template.
-    # 7. Remove (manually?) the images that have wrong background removal
-    #     -> Again, perhaps this can be done procedurally
-    # Phase 2 - Generating synthetic data
-    # 8. Loop through all filters available in filter_selected, paste a class label from class_labels
-    #    on it, and paste that onto the background.
-    # 9. Post-processing: Cleaning the images pasted on top of each other
-    # Applying inpainting around the rectangle that is pasted on the image
-    # (Applied after each pasting step)
-    # 10. Do a quick personal survey of each new data sample and remove
-    # the ones that are not good enough
-
+    """Function that details data generation algorithm. It consists of 3 phases.
+    Refer to the written report for a full explanation as to how it works.
+    Total generation time is 20 minutes for 70 additional samples per class
+    on a Ryzen 9 3900x CPU.
+    
+    Args:
+        n: Number of data points to generate per class.
+    """
     # Listing class names and data types
     class_names = ["fail_label_not_fully_printed", "fail_label_half_printed",
                    "fail_label_crooked_print", "no_fail"]
     data_types = ["train", "val", "test"]
     start_time = time.time()
 
-    #print("Creating Synthetic data directories")
-    create_synthetic_data_dirs(class_names)
-    #print("Getting class labels and saving filters without labels")
-    get_removed_label(class_names, data_types) # Steps 1-3
+    # Phase 1
+    print("Getting class labels and saving filters without labels")
+    get_removed_label(class_names, data_types)
+    # Phase 2
     print("Matching filters")
-    filter_coordinates = get_selected_filter() # Steps 4-5
+    filter_coordinates = get_selected_filter()
+    # Phase 3
     print("Generating Synthetic data")
-    generate_synthetic_data(filter_coordinates, class_names, n) # Step 7
+    generate_synthetic_data(filter_coordinates, class_names, n)
 
     # Recording total time passed
-    # Takes about 19 minutes for 70 samples per class
     elapsed_time = time.time() - start_time
     print("Total data generation time (H/M/S) = ", 
           time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 
 
 def check_prev_files(data_type: str, syn_data_path: str, classes: list):
-    # Creating data directories if they do not exist
-    # And removing old files if they do exist   
+    """Function that checks data directories if they exists. 
+    Removes old files if they do exists.
+    
+    Args:
+        data_type: Type of data (train, val, test).
+        syn_data_path: Path to synthetic data directory.
+        classes: List of class names.
+    """
     if not os.path.exists(os.path.join(syn_data_path, data_type)):
         os.mkdir(os.path.join(syn_data_path, data_type))
         for data_class in classes:
@@ -526,6 +532,15 @@ def check_prev_files(data_type: str, syn_data_path: str, classes: list):
 
 def copy_list_files(samples: list, data_class: str, syn_data_path: str,
                     copy_type: str, data_type: str):
+    """Function that copies a list of files from a directory to another.
+    
+    Args:
+        samples: List of file names.
+        data_class: Class name.
+        syn_data_path: Path to synthetic data directory.
+        copy_type: Type of data to copy (synthetic or real).
+        data_type: Type of data (train, val, test).
+    """
     if copy_type == "synthetic":
         path = SYNTHETIC_EX_PATH
     elif copy_type == "real":
@@ -541,9 +556,23 @@ def copy_list_files(samples: list, data_class: str, syn_data_path: str,
         destination_path = os.path.join(syn_data_path, data_type, data_class, sample)
         shutil.copyfile(source_path, destination_path)
 
-def create_synthetic_dataset(train_set, val_set, test_set,
-                             train_ratio, val_ratio, test_ratio,
-                             no_combine):
+
+def create_synthetic_dataset(train_set: int, val_set: int, test_set: int,
+                             train_ratio: float, val_ratio: float, test_ratio: float,
+                             no_combine: bool):
+    """Function that creates a synthetic dataset, given the total sizes
+    and the ratios between the real and synthetic data.
+    
+    Args:
+        train_set: Number of training samples per class created synthetically.
+        val_set: Number of validation samples per class created synthetically.
+        test_set: Number of test samples per class created synthetically.
+        train_ratio: Ratio of real samples to synthetic samples in the training set.
+        val_ratio: Ratio of real samples to synthetic samples in the validation set.
+        test_ratio: Ratio of real samples to synthetic samples in the test set.
+        no_combine: Boolean that indicates whether to combine real and synthetic data.
+    """
+
     if not os.path.exists(os.path.join("data", "NTZFilterSynthetic")):
         os.mkdir(os.path.join("data", "NTZFilterSynthetic"))
     syn_data_path = os.path.join("data", "NTZFilterSynthetic")
@@ -620,6 +649,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     n = args.train_set + args.val_set + args.test_set
 
+    # Create synthetic data directories
+    classes = ["fail_label_not_fully_printed", "fail_label_half_printed",
+                   "fail_label_crooked_print", "no_fail"]
+    print("Creating Synthetic data directories")
+    create_synthetic_data_dirs(classes)
+
     # Check if ratios are valid
     if args.train_ratio < 0 or args.train_ratio > 1 \
        or args.val_ratio < 0 or args.val_ratio > 1 \
@@ -662,7 +697,6 @@ if __name__ == '__main__':
 
     # Check if enough synthetic data already exists and hence does not
     # need to be regenerated
-    classes = os.listdir(SYNTHETIC_EX_PATH)
     for data_class in classes:
         class_samples = os.listdir(os.path.join(SYNTHETIC_EX_PATH, data_class))
         if len(class_samples) < n:

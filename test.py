@@ -1,19 +1,20 @@
 import argparse
 import json
+import numpy as np
 import os
 import tensorrt as trt
 import time
 import torch
-import numpy as np
-from torch.utils.data import DataLoader
 import torchvision
+
 from tqdm import tqdm
 
-from utils import get_data_loaders, save_test_predicts, remove_predicts, \
-                  cutoff_date, get_device    
 from datasets import NTZFilterDataset, NTZFilterSyntheticDataset, \
                      CIFAR10Dataset
+from torch.utils.data import DataLoader
 from train_rbf import RBF_model
+from utils import get_data_loaders, save_test_predicts, remove_predicts, \
+                  cutoff_date, get_device    
 
 TRTFLAG = True
 try:
@@ -22,20 +23,24 @@ except ModuleNotFoundError:
     TRTFLAG = False
 
 
-def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int, img_size: int):
-    """This function takes a PyTorch model and converts it to a TensorRT model.
-    It creates a config file with a custom profile since the batch size can be variable
+def convert_to_trt(model: torchvision.models, data_len: int,
+                   batch_size: int, img_size: int) -> torchvision.models:
+    """This function takes a PyTorch model and converts it to
+    a TensorRT model. It creates a config file with a custom profile
+    since the batch size can be variable
 
     Args:
         model: Pytorch model to convert
         data_len: The length of the testing set.
         batch_size: The batch size of the testing set.
+        img_size: The size of the images in test set.
     Returns:
         TensorRT converted model.
     """
     # Using a trt builder to create a config and a profile
     # Which is necessary because the batch size is variable
-    # It can change at the end, if the dataset size is not divisible by the batch size
+    # It can change at the end, if the dataset size is
+    # not divisible by the batch size
     norm_shape = (batch_size, 3, img_size, img_size)
     builder = trt.Builder(trt.Logger())
     config = builder.create_builder_config()
@@ -52,7 +57,8 @@ def convert_to_trt(model: torchvision.models, data_len: int, batch_size: int, im
     return model
 
 
-def get_inference_speed(model: torchvision.models, device: torch.device, data_loader: DataLoader, n: int):
+def get_inference_speed(model: torchvision.models, device: torch.device,
+                        data_loader: DataLoader, n: int):
     """This function calculates the inference speed of a model by 
     doing n+1 forwards passes and calculating the time it takes
     to classify all images in the dataset.
@@ -78,11 +84,10 @@ def get_inference_speed(model: torchvision.models, device: torch.device, data_lo
             fps.append(round(total_imgs / (time.time() - test_start)))
     print("Average inference fps = " + str(np.mean(fps)))
     print("Standard deviation = " + str(np.std(fps)))
-    return model
 
 
-def test_model(model: torchvision.models, device: torch.device, data_loader: DataLoader,
-               img_destination: str, rbf_flag: bool):
+def test_model(model: torchvision.models, device: torch.device,
+               data_loader: DataLoader, img_destination: str, rbf_flag: bool):
     """Function that tests the feature model on the test dataset.
     It runs through a forward pass to get the model output and saves the
     output images to appropriate directories through the save_test_predicts
@@ -95,8 +100,8 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
         img_destination: Designated  folder to save images to.
         rbf_flag: If true, the model is a RBF model.
     Returns:
-        Lists of predicted labels and the image paths.
-        Concatenated inputs.
+        Lists of predicted labels, image paths, concatenated inputs,
+        uncertainty predictions (if present).
     """
     # Set model to evaluating, set speed measurement variable
     model.eval()
@@ -136,21 +141,22 @@ def test_model(model: torchvision.models, device: torch.device, data_loader: Dat
     prediction_list, img_paths_list = save_test_predicts(predicted_labels, img_paths,
                                                          img_destination, data_loader.dataset,
                                                          predicted_uncertainty)
-
     return prediction_list, img_paths_list, input_concat, predicted_uncertainty
 
 
-def setup_testing(experiment_folder: str, convert_trt: bool = False, calc_speed: bool = False):
+def setup_testing(experiment_folder: str, convert_trt: bool = False,
+                  calc_speed: bool = False):
     """Function that sets up dataloader, transforms and loads in the model
     for testing. 
 
     Args: 
         experiment_folder: The folder with a model.pth file
         convert_trt: If true, the model is converted to tensorRT.
-        explain_model: Contains a string with the model explanation type
+        calc_speed: If true, the inference speed is calculated.
     Returns:
-        The model, the dataloader and the device.
-        For usage in explainability.py
+        The model, predicted labels, paths to testing images,
+        concatenated inputs, the predicted uncetainty (if present)
+        and the data loader for the test set.
     """
     # Setting the device to use and enabling lazy loading
     try: 

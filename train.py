@@ -3,10 +3,11 @@ import copy
 import os
 import time
 import torch
+import torchvision
+
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import Accuracy, F1Score
-import torchvision
 from tqdm import tqdm
 from types import SimpleNamespace
 
@@ -171,7 +172,8 @@ def run_experiment(experiment_name: str):
     data_loaders = get_data_loaders(args.batch_size, transform, args.dataset)
 
     # Setting up tensorboard writers and writing hyperparameters
-    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name,
+                                                             "Experiment-Results")
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
     # Replacing the output classification layer with a N class version

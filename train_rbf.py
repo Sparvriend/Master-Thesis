@@ -2,9 +2,10 @@ import argparse
 import os
 import time
 import torch
+import torchvision
+
 from torch import nn
 from torchmetrics import Accuracy, F1Score
-import torchvision
 from tqdm import tqdm
 from types import SimpleNamespace
 
@@ -150,8 +151,9 @@ class RBF_model(nn.Module):
         return grad_pen * self.gp_const
 
 
-def set_rbf_model(model: torchvision.models, classes: int, device: torch.device,
-                  gp_const: float, batch_size: int):
+def set_rbf_model(model: torchvision.models, classes: int,
+                  device: torch.device, gp_const: float,
+                  batch_size: int):
     """This function takes a Pytorch deep Learning model, finds its
     classification layer and then converts that to an RBF layer.
 
@@ -159,6 +161,8 @@ def set_rbf_model(model: torchvision.models, classes: int, device: torch.device,
         model: Pytorch deep learning model.
         classes: Amount of classes in the dataset.
         device: Device to run the model on.
+        gp_const: gradient penalty multiplicative constant.
+        batch_size: Batch size used for training.
 
     Returns:
         Model adapted to an RBF version
@@ -169,11 +173,12 @@ def set_rbf_model(model: torchvision.models, classes: int, device: torch.device,
         model._modules[name][idx] = torch.nn.Identity()
     else:
         model._modules[name] = torch.nn.Identity()
-    model = RBF_model(model, in_features, classes, device, gp_const, batch_size)
+    model = RBF_model(model, in_features, classes, device,
+                      gp_const, batch_size)
     return model
 
 
-def preprocess_model(model: torchvision.models):
+def preprocess_model(model: torchvision.models) -> torchvision.models:
     """Function that takes care of converting convolutional
     and maxpooling layers to appropriate versions for usage
     in DUQ. This should only happen if the dataset is
@@ -187,14 +192,18 @@ def preprocess_model(model: torchvision.models):
         Model adapted appropriate for DUQ.
     """
     if model.__class__.__name__ == "ResNet":
-        model.conv1 = torch.nn.Conv2d(3, 64, kernel_size = 3, stride = 1, padding = 1, bias = False)
+        model.conv1 = torch.nn.Conv2d(3, 64, kernel_size = 3, stride = 1,
+                                      padding = 1, bias = False)
         model.maxpool = torch.nn.Identity()
     if model.__class__.__name__ == "MobileNetV2":
-       model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1, padding = 1, bias = False)
+       model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1,
+                                              padding = 1, bias = False)
     if model.__class__.__name__ == "EfficientNet":
-        model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1, padding = 1, bias = False)
+        model.features[0][0] = torch.nn.Conv2d(3, 32, kernel_size = 3, stride = 1,
+                                               padding = 1, bias = False)
     if model.__class__.__name__ == "ShuffleNetV2":
-        model.conv1[0] = torch.nn.Conv2d(3, 24, kernel_size = 3, stride = 1, padding = 1, bias = False)
+        model.conv1[0] = torch.nn.Conv2d(3, 24, kernel_size = 3, stride = 1,
+                                         padding = 1, bias = False)
         model.maxpool = torch.nn.Identity()
     return model
 
@@ -203,7 +212,9 @@ def train_duq(experiment_name: str):
     """Function used for training a model with DUQ.
     The model is converted to a DUQ model and then trained
     in a training/validation phase setup. All types of models
-    and datasets are possible to be used.
+    and datasets are possible to be used. In practice,
+    combining this function with train_py's main function
+    did not work, hence this file exists.
 
     Args:
         experiment_name: Name of the experiment to be used.
@@ -226,7 +237,8 @@ def train_duq(experiment_name: str):
     data_loaders = get_data_loaders(args.batch_size, transform, args.dataset)
 
     # Setting up tensorboard writers and writing hyperparameters
-    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name, "Experiment-Results")
+    tensorboard_writers, experiment_path = setup_tensorboard(experiment_name,
+                                                             "Experiment-Results")
     setup_hyp_file(tensorboard_writers["hyp"], hyp_dict)
 
     # Getting the model and converting to RBF

@@ -1,21 +1,17 @@
 import argparse
-import json
-import os
-import re
-import time
-import random
-import shutil
-import cv2
-import numpy as np
-import tensorflow as tf
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 import copy
+import json
+import matplotlib.pyplot as plt
+import os
+import pandas as pd
+import random
+import re
+import seaborn as sns
+import shutil
+import tensorflow as tf
+import time
 
 from utils import merge_experiments, calculate_acc_std
-
-EX_PATH = "Experiments"
 
 
 def experiment_1():
@@ -25,11 +21,9 @@ def experiment_1():
     Experiment 1b: Training on only synthetic data, validating on real set.
     Experiment 1c: Training on only real data, validating on synthetic set.
     """
+    # Experiment 1a; the total size of the dataset is always 48.
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)"]
-
-    # Experiment 1a
-    # In experiment 1a, the total size of the dataset is always 48.
     n_runs = 10
     combs = [[12, 0.25], [24, 0.5], [36, 0.75], [48, 1]]
     for comb in combs:
@@ -45,13 +39,11 @@ def experiment_1():
                       + " --n_runs " + str(n_runs))
             delete_json(ex_name)
 
+    # Experiment 1b/1c; the size of the dataset can be larger than 48.
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)",
                    "shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)",
                    "efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)"] 
-
-    # Experiment 1b/1c
-    # In experiment 1b/1c, the size of the dataset can be larger than 48.
     n_runs = 10
     combs = [[200, 1, 0, 0], [0, 0, 48, 1]]
     for comb in combs:
@@ -60,10 +52,9 @@ def experiment_1():
         val_set = comb[2]
         val_ratio = comb[3]
         for classifier in classifiers:
-            # Editing JSON file, creating synthetic data and running experiment
-            ex_name = edit_json("experiment_1", ["model", "epochs"], [classifier, "40",
-                                                            train_set, train_ratio,
-                                                            val_set, val_ratio])
+            ex_name = edit_json("experiment_1", ["model", "epochs"],
+                                [classifier, "40", train_set, train_ratio,
+                                 val_set, val_ratio])
             os.system("python3.10 synthetic_data.py " + str(train_set)
                                                       + " " + str(train_ratio)
                                                       + " " + str(val_set)
@@ -75,7 +66,7 @@ def experiment_1():
     
     # Calculating FID score per class
     # Compare roughly equal amount of samples (~70)
-    # Create a temporary directory that includes synthetic data with ~70 samples
+    # Creates a temporary directory that includes synthetic data with ~70 samples
     classes = os.listdir(os.path.join("data", "NTZFilter", "train"))
     syn_path = os.path.join("raw_data", "NTZ_filter_synthetic", "synthetic_data")
     real_path = os.path.join("data", "NTZFilter", "train")
@@ -86,11 +77,13 @@ def experiment_1():
 
         # Copy to temporary directory
         for file in syn_files:
-            shutil.copy(os.path.join(syn_path, c, file), os.path.join(syn_path, "temp"))
+            shutil.copy(os.path.join(syn_path, c, file),
+                        os.path.join(syn_path, "temp"))
             
         # Perform computation
         print("FID SCORE FOR CLASS " + c)
-        os.system("python3.10 -m pytorch_fid " + os.path.join(syn_path, c) + " " + os.path.join(real_path, c))
+        os.system("python3.10 -m pytorch_fid " + os.path.join(syn_path, c) +
+                  " " + os.path.join(real_path, c))
 
         # Remove files
         syn_files = os.listdir(os.path.join(syn_path, "temp"))
@@ -106,9 +99,9 @@ def experiment_2():
     on the NTZFilterSynthetic dataset.
     """
     combs = [["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)", "20"],
-                   ["resnet18(weights = ResNet18_Weights.DEFAULT)", "20"],
-                   ["shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)", "40"],
-                   ["efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)", "20"]]
+             ["resnet18(weights = ResNet18_Weights.DEFAULT)", "20"],
+             ["shufflenet_v2_x1_0(weights = ShuffleNet_V2_X1_0_Weights.DEFAULT)", "40"],
+             ["efficientnet_b1(weights = EfficientNet_B1_Weights.DEFAULT)", "20"]]
     augmentations = ["rand_augment", "categorical",
                     "random_choice", "auto_augment",]
     n_runs = 10
@@ -130,12 +123,10 @@ def experiment_2():
 
 def experiment_3():
     """Experiment 3: Classifier testing on the NTZFilterSynthetic dataset.
-    Includes the best augmentation techniques from experiment 2:
-    Rand augment consistently gives the best results for all classifiers.
+    Includes the best augmentation techniques from experiment 2.
     Includes a feature analsysis with IG.
-    TRT vs. no TRT speeds have to be run manually.  
-    GFLOPS calculation has to be run manually.
-    Show loss graph as well as accuracy graph.
+    TRT vs. no TRT speeds have to be run manually. (test.py)
+    GFLOPS calculation has to be run manually. (utils.py)
     """
     classifiers = ["mobilenet_v2(weights = MobileNet_V2_Weights.DEFAULT)",
                    "resnet18(weights = ResNet18_Weights.DEFAULT)",
@@ -194,7 +185,7 @@ def experiment_4():
 def experiment_5():
     """Experiment 5: DUQ analysis on NTZFilter dataset.
     Includes feature analysis with IG on a DUQ model.
-    Model speeds have to be run manually (No TRT).
+    Model speeds have to be run manually (No TRT) (test.py).
     Uses rand augment for all classifiers since that is the best one
     """
     combs = [["mobilenet_v2()", "lr = 0.05"],
@@ -237,13 +228,13 @@ def delete_json(json_name: str):
         json_name: Name of the JSON file to delete.
     """
     try:
-        os.remove(os.path.join(EX_PATH, json_name))
+        os.remove(os.path.join("Experiments", json_name))
         print(f"{json_name} has been deleted.")
     except FileNotFoundError:
         print(f"{json_name} does not exist.")
 
 
-def edit_json(json_name, json_args, json_values):
+def edit_json(json_name: str, json_args: list, json_values: list) -> str:
     """Function that takes a basic JSON file for an experiment,
     edits it and saves that new version.
 
@@ -254,7 +245,7 @@ def edit_json(json_name, json_args, json_values):
     Returns:
         Name of the experiment results folder.
     """
-    with open(os.path.join(EX_PATH, json_name + ".json")) as ex_file:
+    with open(os.path.join("Experiments", json_name + ".json")) as ex_file:
         data = json.load(ex_file)
 
     for arg, value in zip(json_args, json_values):
@@ -271,13 +262,12 @@ def edit_json(json_name, json_args, json_values):
     re_pattern = r'\(.*\)'
     ex_name = re.sub(re_pattern, '', ex_name)
 
-    with open(os.path.join(EX_PATH, ex_name), 'w') as temp_file:
+    with open(os.path.join("Experiments", ex_name), 'w') as temp_file:
         json.dump(data, temp_file)
-
     return ex_name
 
 
-def find_directory(ex_name):
+def find_directory(ex_name: str) -> str:
     """Function that finds the directory of the experiment results.
 
     Args:
@@ -295,11 +285,14 @@ def find_directory(ex_name):
     return directory
 
 
-def unmerge_experiments(ex_name):
-    # I am retarded, but this seems like the best way of doing this,
-    # instead of changing explainability.py/test.py so late in the
-    # development process.
+def unmerge_experiments(ex_name: str):
+    """Function that unmerges experiments, which is necessary
+    for usage in experiments 3 and 5 when doing multiple runs.
+    For efficiency, this should have been changed in explainability.py
 
+    Args:
+        ex_name: Name of the experiment results folder.
+    """
     for file in os.listdir(os.path.join("Results", "Experiment-Results", ex_name)):
         source = os.path.join("Results", "Experiment-Results", ex_name, file)
         destination = os.path.join("Results", "Experiment-Results", file)
@@ -315,10 +308,11 @@ def create_def_combined():
 
 
 def graph_experiment_1():
+    """Function that graphs all results for experiment 1."""
     check_remove()
     collected_data = extract_data("multiple")
 
-    # Experiment 1a first
+    # Experiment 1a
     sub_list = []
     substrs = ["12", "24", "36", "48"]
     for item in ["mobilenet", "resnet18"]:
@@ -339,7 +333,8 @@ def graph_experiment_1():
     
     names = ["MobileNetV2", "ResNet18"]
     for idx, item in enumerate(sub_list):
-        plot_data(item, names[idx] + " Synthetic Ratio ", "", os.path.join("Results", "Experiment-Results"), True)
+        plot_data(item, names[idx] + " Synthetic Ratio ", "",
+                  os.path.join("Results", "Experiment-Results"), True)
 
     # Experiments 1b/1c
     sub_list = []
@@ -351,10 +346,12 @@ def graph_experiment_1():
     
     names = ["Train set", "Validation set"]
     for idx, item in enumerate(sub_list):
-        plot_data(item, "", " on Synthetic " + names[idx], os.path.join("Results", "Experiment-Results"), True)
+        plot_data(item, "", " on Synthetic " + names[idx], 
+                  os.path.join("Results", "Experiment-Results"), True)
 
 
 def graph_experiment_2():
+    """Function that graphs all results for experiment 2."""
     check_remove()
     collected_data = extract_data("multiple")
 
@@ -379,17 +376,21 @@ def graph_experiment_2():
 
     names = ["EfficientNetB1", "MobileNetV2", "ResNet18", "ShuffleNetV2"]
     for idx, item in enumerate(full_list):
-        plot_data(item, names[idx] + " Augmentations ", "", os.path.join("Results", "Experiment-Results"), True)
+        plot_data(item, names[idx] + " Augmentations ", "",
+                  os.path.join("Results", "Experiment-Results"), True)
 
 
 def graph_experiment_3():
+    """Function that graphs all results for experiment 3."""
     check_remove()
     collected_data = extract_data("multiple")
     collected_data = convert_labels_classifier(collected_data)
-    plot_data(collected_data, "Classifier ", "", os.path.join("Results", "Experiment-Results"), True)
+    plot_data(collected_data, "Classifier ", "",
+              os.path.join("Results", "Experiment-Results"), True)
 
 
 def graph_experiment_4():
+    """Function that graphs all results for experiment 4."""
     check_remove()
     collected_data = extract_data("single")
 
@@ -402,23 +403,35 @@ def graph_experiment_4():
 
     names = [" without GP", " with GP"]
     for idx, item in enumerate(full_list):
-        plot_data(item, "DUQ Classifier ", names[idx], os.path.join("Results", "Experiment-Results")) 
+        plot_data(item, "DUQ Classifier ", names[idx],
+                  os.path.join("Results", "Experiment-Results")) 
 
 
 def graph_experiment_5():
+    """Function that graphs all results for experiment 5."""
     check_remove()
     collected_data = extract_data("multiple")
     collected_data = convert_labels_classifier(collected_data)
-    plot_data(collected_data, "DUQ Classifier ", "", os.path.join("Results", "Experiment-Results"), True)
+    plot_data(collected_data, "DUQ Classifier ", "",
+              os.path.join("Results", "Experiment-Results"), True)
 
 
 def check_remove():
+    """Function that checks if output graphs have been made and removes them."""
     for file in os.listdir(os.path.join("Results", "Experiment-Results")):
         if file.endswith(".png"):
             os.remove(os.path.join("Results", "Experiment-Results", file))       
 
 
-def convert_labels_classifier(collected_data):
+def convert_labels_classifier(collected_data: dict):
+    """Function that changes the classifier labels from the one
+    defined in the JSON file to the one used in the graphs.
+    
+    Args:
+        collected_data: Dictionary containing all the data.
+    Returns:
+        Dictionary containing all the data with the new labels.
+    """ 
     copykeys = copy.deepcopy(collected_data)
 
     for key, _ in copykeys.items():
@@ -433,7 +446,15 @@ def convert_labels_classifier(collected_data):
     return collected_data
 
 
-def extract_data(run_type):
+def extract_data(run_type: str) -> dict:
+    """Function that contains the overview for extracting experiment
+    information from tensorboard event files.
+    
+    Args:
+        run_type: Type of run, either single or multiple.
+    Returns:
+        Dictionary containing all the data.
+    """
     if run_type == "single":
     # This is how it works for a single runs
         event_loc = os.path.join("Results", "Experiment-Results")
@@ -460,7 +481,15 @@ def extract_data(run_type):
     return collected_data
 
 
-def merge_dfs(combined_df):
+def merge_dfs(combined_df: pd.DataFrame) -> pd.DataFrame:
+    """Function that merges the DataFrames of multiple experiment runs.
+    
+    Args:
+        combined_df: DataFrame containing all the data.
+    Returns:
+        DataFrame containing all the data, but merged.
+    """
+
     # Group the data by the "Step" column
     grouped = combined_df.groupby("Step")
 
@@ -493,11 +522,18 @@ def merge_dfs(combined_df):
     # And for the loss
     error_rows = result_df[result_df["Mean Validation Loss"] - result_df["Std Validation Loss"] < 0]
     result_df.loc[error_rows.index, "Std Validation Loss"] = result_df["Mean Validation Loss"]
-
     return result_df
 
 
-def extract_single_df(event_loc):
+def extract_single_df(event_loc: str) -> pd.DataFrame:
+    """Function that analyses a single tensorboard event file and
+    moves the data to a pandas dataframe.
+
+    Args:
+        event_loc: Location of the event file.
+    Returns:
+        DataFrame containing the data.
+    """
     val_event = os.listdir(os.path.join(event_loc, "val"))[0]
     val_event = os.path.join(event_loc, "val", val_event)
 
@@ -517,11 +553,24 @@ def extract_single_df(event_loc):
 
     # Create a DataFrame from the extracted data
     step = [i for i in range(len(val_acc))]
-    data = pd.DataFrame({'Step': step, 'Validation Accuracy': val_acc, 'Validation Loss': val_loss})
+    data = pd.DataFrame({'Step': step, 'Validation Accuracy': val_acc,
+                         'Validation Loss': val_loss})
     return data
 
 
-def plot_data(collected_data, title1, title2, path, multi = False):
+def plot_data(collected_data: dict, title1: str, title2: str,
+              path: str, multi: bool = False):
+    """Function that takes collected data and plots it.
+    If multi is set to True, then it knows to plot averages
+    and plots standard deviation transparency.
+    
+    Args:
+        collected_data: Dictionary containing all the data.
+        title1: 1st part of plot title
+        title2: 2nd part of plot title.
+        path: Path to save the plot.
+        multi: Boolean indicating if the data is from multiple runs.
+    """
     # Setting plotstyle and getting df length
     sns.set(style="darkgrid")
     iterable = iter(collected_data.items())
@@ -578,28 +627,27 @@ if __name__ == '__main__':
     args = parser.parse_args()
     start = time.time()
 
+    # Time estimates per experiment when using an RTX 3080
+    # Without adding in the computation time of synthetic data:
+    # Experiment 1: 2 hours and 48 minutes (10 runs)
+    # Experiment 2: 5 hours and 18 mintes (10 runs)
+    # Experiment 3: 3 hours (10 runs)
+    # Experiment 4: 19 hours (1 run)
+    # Experiment 5: 11 hours and 30 minutes (3 runs)
+
     if args.experiment == "experiment_1":
-        # Time estimate (no new synthetic data/1 run): 60 minutes
-        # Time estimate (no new synthetic data/10 runs)): 2 hours 48 minutes
         experiment_1()
         graph_experiment_1()
     elif args.experiment == "experiment_2":
-        # Time estimate (no new synthetic data/1 run): 60 minutes
-        # Time estimate (no new synthetic data/10 runs): 5 hours 18 minutes
         experiment_2()
         graph_experiment_2()
     elif args.experiment == "experiment_3":
-        # Time estimate (no new synthetic data/1 run): 18 minutes
-        # Time estimate (no new synthetic data/10 runs): 3 hours
         experiment_3()
         graph_experiment_3()
     elif args.experiment == "experiment_4":
-        # Time estimate: 19 hours
         experiment_4()
         graph_experiment_4()
     elif args.experiment == "experiment_5":
-        # Time estimate: 4 hours
-        # Time estimate (3 runs): 11 hours 30 minutes
         experiment_5()
         graph_experiment_5()
     

@@ -1,37 +1,33 @@
 import datetime
-import colorsys
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-import pandas as pd
 import random
 import shutil
 import time
 import torch
+import torchvision
+import torchvision.transforms as T
+import warnings
+
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
+from deepspeed.profiling.flops_profiler import get_model_profile
+from imagecorruptions import corrupt
 from torch import nn, optim
 from torch.optim import lr_scheduler
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torchmetrics import ConfusionMatrix
-import torchvision
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights, \
                                shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights, \
                                resnet18, ResNet18_Weights, \
                                efficientnet_b1, EfficientNet_B1_Weights
-import torchvision.transforms as T
-from torch.utils.data import Dataset, DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 from datasets import NTZFilterDataset, NTZFilterSyntheticDataset, \
                      CIFAR10Dataset
-from deepspeed.profiling.flops_profiler import get_model_profile
-from imagecorruptions import corrupt
-import warnings
-
-from thop import profile
-from fvcore.nn import FlopCountAnalysis
 
 
 class CustomCorruption:
@@ -54,7 +50,7 @@ class CustomCorruption:
         return Image.fromarray(img)
 
 
-def get_device():
+def get_device() -> torch.device:
     """Function that returns the device, either cuda if gpu is availble or cpu.
     
     Returns:
@@ -208,7 +204,7 @@ def report_metrics(flag: dict, start_time: float, epoch_length: int,
     file.close()
 
 
-def find_classification_module(model: torchvision.models):
+def find_classification_module(model: torchvision.models) -> tuple:
     """Function that takes in a model and finds the classification layer.
     An assumption is made that the linear layer is either directly located in
     a layer called fc or in a sub module in a layer called classifier.
@@ -239,13 +235,11 @@ def find_classification_module(model: torchvision.models):
 def set_classification_layer(model: torchvision.models, classes: int):
     """This function changes the final classification layer
     from a PyTorch deep learning model to a X output classes version,
-    depending on the dataset. It also converts to DUQ if rbf_flag is True.
+    depending on the dataset.
 
     Args: 
         model: This is a default model, with usually a lot more output classes.
         classes: The amount of output classes for the model.
-        rbf_flag: Boolean for swapping the classification layer with an RBF layer.
-        device: device on which the model is ran.
     
     Returns:
         The model with the new classification layer.
@@ -276,7 +270,6 @@ def sep_collate(batch: list) -> tuple[torch.stack, torch.stack]:
     # Converting both images and label lists of tensors to torch stacks
     images = torch.stack(list(images), dim = 0)
     labels = torch.stack(list(tensor_labels), dim = 0)
-
     return images, labels
 
 
@@ -290,9 +283,7 @@ def sep_test_collate(batch: list) -> tuple[torch.stack, list]:
         images as torch stack and paths.
     """
     path, images, _ = zip(*batch)
-
     images = torch.stack(list(images), dim = 0)
-
     return images, path
 
 
@@ -362,11 +353,11 @@ def save_test_predicts(predicted_labels: list, paths: list,
             img = draw_uncertainty_bar(img, predicted_uncertainty[idx], text_size)
 
         img.save(os.path.join(img_destination, name))
-
     return predicted_labels, paths
 
 
-def draw_label(img: Image, text_loc: tuple, text_size: int, label_name: str) -> Image:
+def draw_label(img: Image, text_loc: tuple,
+               text_size: int, label_name: str) -> Image:
     """Function that draws a label on the top left of an image.
 
     Args:
@@ -375,13 +366,14 @@ def draw_label(img: Image, text_loc: tuple, text_size: int, label_name: str) -> 
         text_size: Size of the text to be drawn.
         label_name: Name of the label to be drawn.
     """
-    font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
+    font = ImageFont.truetype(os.path.join("raw_data", "arial.ttf"), size = text_size)
     draw = ImageDraw.Draw(img)
     draw.text(text_loc, label_name, font = font, fill = 255)
     return img
 
 
-def draw_uncertainty_bar(img: Image, uncertainty: float, text_size: int, ) -> Image:
+def draw_uncertainty_bar(img: Image, uncertainty: float,
+                         text_size: int, ) -> Image:
     """Function that draws a bar with the uncertainty on the bottom of the image.
     
     Args:
@@ -391,7 +383,7 @@ def draw_uncertainty_bar(img: Image, uncertainty: float, text_size: int, ) -> Im
 
     Returns: Image with the bar drawn on it.
     """
-    font = ImageFont.truetype(os.path.join("data", "arial.ttf"), size = text_size)
+    font = ImageFont.truetype(os.path.join("raw_data", "arial.ttf"), size = text_size)
     uncertainty = round(uncertainty, 2)
     width, height = img.size
     bar_height = text_size
@@ -421,6 +413,7 @@ def setup_tensorboard(experiment_name: str, folder: str) -> tuple[list[SummaryWr
     
     Args:
         experiment_name: Name of the experiment that is run.
+        folder: Folder in which the experiment is run.
     Returns:
         List of tensorboard writers.
     """
@@ -518,7 +511,8 @@ def merge_experiments(experiment_list: list, path: str):
         for file in files:
             if os.path.isdir(os.path.join(path, file)):
                 if file.startswith(experiment):
-                    shutil.copytree(os.path.join(path, file), os.path.join(path, experiment, file))
+                    shutil.copytree(os.path.join(path, file),
+                                    os.path.join(path, experiment, file))
                     shutil.rmtree(os.path.join(path, file))
 
 
@@ -654,7 +648,7 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
                    transform_type: str = "categorical") -> T.Compose:
     """Function that retrieves transforms and combines them into a compose
     element based on which option is selected. The augmentations should only
-    be randomized by RandomApply/RandomChoice, not by any random probability
+    be randomized by RandomChoice, not by any random probability
     in the functions themselves. Transformations taken from: 
     https://pytorch.org/vision/stable/transforms.html.
 
@@ -672,7 +666,6 @@ def get_transforms(dataset: Dataset = NTZFilterDataset,
                          "random_choice": T.RandomChoice(combined_transforms),
                          "auto_augment": T.AutoAugment(policy = T.AutoAugmentPolicy.IMAGENET),
                          "no_augment": T.Lambda(lambda x: x),
-                         "random_apply": T.RandomOrder(combined_transforms),
                          "simple": T.RandomHorizontalFlip()}
 
     # Getting default transform and inserting selected transform type
